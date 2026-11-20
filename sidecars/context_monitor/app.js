@@ -27,8 +27,13 @@
       'trace.model': 'Model',
       'trace.tool': 'Tool',
       'trace.system': 'Injected',
-      'trace.timeContext': 'Time Context',
       'trace.error': 'Error',
+      'inj.time': 'Time',
+      'inj.image': 'Image',
+      'inj.attachment': 'File',
+      'inj.compaction': 'Compaction',
+      'inj.settings': 'Settings',
+      'inj.other': 'Other injected',
       'trace.follow': 'Follow',
       'trace.followTip': 'Auto-scroll to latest events',
       'trace.latest': 'Latest',
@@ -41,6 +46,8 @@
       'td.args': 'Args',
       'td.result': 'Result',
       'td.thinking': 'Thinking',
+      'td.toolCall': 'Tool Call',
+      'td.output': 'Output',
       'td.reply': 'Reply',
       'td.timing': 'Timing',
       'td.reqTiming': 'Request Timing',
@@ -70,16 +77,12 @@
       'live.ok': 'Live',
       'live.stale': 'Reconnecting',
       'live.generating': 'Generating',
-      'live.tools': 'Tools',
-      'hooks.title': 'Turn Execution',
-      'hooks.turnsCount': '{n} turns',
-      'hooks.avgTurn': 'Avg Turn',
-      'hooks.maxTurn': 'max {v}',
-      'hooks.loopDepth': 'Loop Depth',
-      'hooks.callsPerTurn': 'calls / turn',
-      'hooks.toolErrors': 'Tool Errors',
-      'hooks.toolCallsSub': 'of {n} calls',
-      'hooks.reason.NO_TOOL_CALL': 'Done',
+      'hooks.title': 'Tool Execution',
+      'hooks.callsCount': '{n} calls',
+      'hooks.success': 'Succeeded',
+      'hooks.failed': 'Failed',
+      'hooks.toolTime': 'Tool Time',
+      'hooks.avgCall': 'avg {v}',
       'hooks.reason.USER_CANCELED': 'Canceled',
       'hooks.reason.ERROR': 'Error',
       'hooks.reason.MAX_INVOCATIONS': 'Max Steps',
@@ -102,17 +105,20 @@
       'session.recentCount': 'latest {n} of {total}',
       'session.limitDefault': 'Default session ceiling (500k)',
       'session.limitCompacted': 'Observed from 1st compaction ({v})',
-      'session.limitExtended': 'Auto-extended without compaction (peak {v})',
+      'session.limitExtended': 'Adapted to historical max context ({v})',
       'session.compacted': '{n} compacted',
       'session.turnsSteps': '{turns} turns · {steps} steps',
       'sort.byTokens': 'Size',
       'sort.byStep': 'Order',
       'sort.count': 'Count',
+      'sort.time': 'Time',
+      'sort.ctx': 'Context',
       'sort.recent': 'Recent',
       'sort.tokens': 'Tokens',
       'sort.context': 'Context',
       'action.expandAll': 'Expand all',
       'action.collapseAll': 'Collapse',
+      'action.back': '← Back',
       'action.cancel': 'Cancel',
       'action.save': 'Save',
       'kpi.totalTokens': 'Total Tokens',
@@ -218,6 +224,12 @@
       'model.cache': 'Cache',
       'model.speed': 'Speed',
       'model.calls': 'Calls',
+      'mtype.cache_read': 'Cache read',
+      'mtype.text_input': 'Text input',
+      'mtype.image_input': 'Image input',
+      'mtype.thinking': 'Thinking',
+      'mtype.tool_call': 'Tool call',
+      'mtype.reply': 'Text output',
       'step.label': 'Step #{step}',
       'step.turn': 'Turn {turn}',
       'step.prompt': 'Context',
@@ -237,9 +249,32 @@
       'settings.colModel': 'Prefix',
       'settings.colWin': 'Context Window',
       'settings.checkUpdate': 'Check updates',
+      'settings.layoutTitle': 'Context Modules & Order',
+      'settings.layoutDesc': 'Toggle visibility or drag / move modules to customize order',
+      'settings.resetLayout': 'Reset',
+      'settings.overviewScope': 'Project & Global',
+      'layout.s.ctx': 'Context Breakdown',
+      'layout.s.telemetry': 'Telemetry KPIs',
+      'layout.s.models': 'Models',
+      'layout.s.timing': 'Time Breakdown',
+      'layout.s.trend': 'Context Trend',
+      'layout.s.hooks': 'Tool Execution',
+      'layout.s.trace': 'Recent Trace',
+      'layout.ov.top': 'KPIs & Usage Chart',
+      'layout.ov.mid': 'Token & Time Breakdown',
+      'layout.ov.models': 'Models',
+      'layout.ov.hooks': 'Tool Execution',
+      'layout.ov.lists': 'Skills / Tools / Commands',
+      'layout.ov.sessions': 'Sessions List',
       'update.checking': 'Checking GitHub…',
       'update.upToDate': 'Up to date (v{ver})',
-      'update.available': 'New version v{latest} available! Update via:',
+      'update.available': 'New version v{latest} available:',
+      'update.btn': 'Update',
+      'update.now': 'Update now',
+      'update.downloading': 'Downloading…',
+      'update.installing': 'Installing…',
+      'update.reloading': 'Reloading…',
+      'update.failed': 'Update failed',
       'update.noRepo': 'Set "repository" in plugin.json to enable GitHub update checks.',
       'update.error': 'Could not reach GitHub.',
       'hm.mon': 'Mon',
@@ -266,8 +301,13 @@
       'trace.model': '模型',
       'trace.tool': '工具',
       'trace.system': '注入',
-      'trace.timeContext': '时间上下文',
       'trace.error': '错误',
+      'inj.time': '时间',
+      'inj.image': '图片',
+      'inj.attachment': '附件',
+      'inj.compaction': '压缩',
+      'inj.settings': '设置',
+      'inj.other': '其他注入',
       'trace.follow': '跟随',
       'trace.followTip': '新事件到来时自动滚动到底部',
       'trace.latest': '最新',
@@ -280,6 +320,8 @@
       'td.args': '参数',
       'td.result': '结果',
       'td.thinking': '思考',
+      'td.toolCall': '工具调用',
+      'td.output': '输出',
       'td.reply': '回复',
       'td.timing': '计时',
       'td.reqTiming': '请求计时',
@@ -308,17 +350,13 @@
       'td.noContent': '（无内容）',
       'live.ok': '实时',
       'live.stale': '重连中',
-      'live.generating': '生成中',
-      'live.tools': '工具中',
-      'hooks.title': '轮次与执行',
-      'hooks.turnsCount': '已记录 {n} 轮',
-      'hooks.avgTurn': '单轮均值',
-      'hooks.maxTurn': '最长 {v}',
-      'hooks.loopDepth': '平均步深',
-      'hooks.callsPerTurn': '次调用 / 轮',
-      'hooks.toolErrors': '工具异常',
-      'hooks.toolCallsSub': '共 {n} 次调用',
-      'hooks.reason.NO_TOOL_CALL': '正常完成',
+      'live.generating': '正在生成',
+      'hooks.title': '工具执行',
+      'hooks.callsCount': '共 {n} 次',
+      'hooks.success': '成功',
+      'hooks.failed': '失败',
+      'hooks.toolTime': '工具耗时',
+      'hooks.avgCall': '均值 {v}',
       'hooks.reason.USER_CANCELED': '手动中断',
       'hooks.reason.ERROR': '异常终止',
       'hooks.reason.MAX_INVOCATIONS': '步数上限',
@@ -341,17 +379,20 @@
       'session.recentCount': '最新 {n} / 共 {total} 条',
       'session.limitDefault': '默认会话上限（500k）',
       'session.limitCompacted': '按首次压缩上限自适应（{v}）',
-      'session.limitExtended': '超出未压缩，已自动延长上限（峰值 {v}）',
+      'session.limitExtended': '按历史最大上下文自适应（{v}）',
       'session.compacted': '压缩 {n} 次',
       'session.turnsSteps': '{turns} 轮 · {steps} 步',
       'sort.byTokens': '按大小',
       'sort.byStep': '按顺序',
       'sort.count': '次数',
+      'sort.time': '耗时',
+      'sort.ctx': '占用',
       'sort.recent': '最近',
       'sort.tokens': 'Token',
       'sort.context': 'Context',
       'action.expandAll': '全部展开',
       'action.collapseAll': '全部收起',
+      'action.back': '← 返回',
       'action.cancel': '取消',
       'action.save': '保存',
       'kpi.totalTokens': '累计 Token',
@@ -457,6 +498,12 @@
       'model.cache': '缓存',
       'model.speed': '速度',
       'model.calls': '调用',
+      'mtype.cache_read': '缓存读取',
+      'mtype.text_input': '文字输入',
+      'mtype.image_input': '图片输入',
+      'mtype.thinking': '思考',
+      'mtype.tool_call': '工具调用',
+      'mtype.reply': '文字输出',
       'step.label': '步骤 #{step}',
       'step.turn': '第 {turn} 轮',
       'step.prompt': '上下文',
@@ -476,9 +523,32 @@
       'settings.colModel': '模型前缀',
       'settings.colWin': '上下文窗口',
       'settings.checkUpdate': '检查更新',
+      'settings.layoutTitle': '上下文模块与顺序',
+      'settings.layoutDesc': '控制模块显示或隐藏，支持拖拽与上下调整展示顺序',
+      'settings.resetLayout': '恢复默认',
+      'settings.overviewScope': '项目与全局',
+      'layout.s.ctx': '上下文占比分布',
+      'layout.s.telemetry': '核心指标条',
+      'layout.s.models': '模型分布',
+      'layout.s.timing': '耗时分布',
+      'layout.s.trend': '上下文趋势',
+      'layout.s.hooks': '工具执行',
+      'layout.s.trace': '最近追踪',
+      'layout.ov.top': '核心指标与用量图',
+      'layout.ov.mid': 'Token 与耗时分布',
+      'layout.ov.models': '模型分布',
+      'layout.ov.hooks': '工具执行',
+      'layout.ov.lists': 'Skills / Tools / Commands',
+      'layout.ov.sessions': '会话列表',
       'update.checking': '正在检查 GitHub 更新…',
       'update.upToDate': '已是最新版本 (v{ver})',
-      'update.available': '发现新版本 v{latest}，可使用以下命令更新：',
+      'update.available': '发现新版本 v{latest}：',
+      'update.btn': '更新',
+      'update.now': '立即更新',
+      'update.downloading': '正在下载...',
+      'update.installing': '正在安装...',
+      'update.reloading': '正在重载...',
+      'update.failed': '更新失败',
       'update.noRepo': '请在 plugin.json 中填写 GitHub repository 字段以启用远端版本检查。',
       'update.error': '无法连接 GitHub 检查更新。',
       'hm.mon': '周一',
@@ -513,6 +583,15 @@
 
   const MODEL_COLORS = ['var(--violet)', 'var(--rose)', '#14b8a6', '#f97316'];
 
+  const MODEL_TYPE_COLORS = {
+    cache_read: 'var(--blue)',
+    text_input: 'var(--green)',
+    image_input: 'var(--pink)',
+    thinking: 'var(--violet)',
+    tool_call: 'var(--amber)',
+    reply: 'var(--slate-ink)',
+  };
+
   const TIMING_META = [
     { key: 'modelWaitMs', color: 'var(--blue)' },
     { key: 'thinkingMs', color: 'var(--violet)' },
@@ -526,11 +605,46 @@
 
   const DEFAULT_SESSION_CTX_LIMIT = 500_000;
 
+  const DEFAULT_SESSION_ORDER = ['ctx', 'telemetry', 'models', 'timing', 'trend', 'hooks', 'trace'];
+  const DEFAULT_OVERVIEW_ORDER = ['top', 'mid', 'models', 'hooks', 'lists', 'sessions'];
+  const SESSION_CARD_WEIGHTS = {
+    ctx: 560,
+    telemetry: 80,
+    models: 150,
+    timing: 110,
+    trend: 210,
+    hooks: 115,
+    trace: 280,
+  };
+
+  function normalizeLayoutConfig(raw, defaults) {
+    const valid = new Set(defaults);
+    const seen = new Set();
+    const order = [];
+    if (Array.isArray(raw?.order)) {
+      for (const id of raw.order) {
+        if (valid.has(id) && !seen.has(id)) {
+          seen.add(id);
+          order.push(id);
+        }
+      }
+    }
+    for (const id of defaults) {
+      if (!seen.has(id)) order.push(id);
+    }
+    const hidden = Array.isArray(raw?.hidden)
+      ? [...new Set(raw.hidden.filter((id) => valid.has(id)))]
+      : [];
+    return { order, hidden };
+  }
+
   function loadSettings() {
     const base = {
       lang: 'en',
       pollMs: 1500,
       defaultTab: 'session',
+      sessionLayout: { order: [...DEFAULT_SESSION_ORDER], hidden: [] },
+      overviewLayout: { order: [...DEFAULT_OVERVIEW_ORDER], hidden: [] },
     };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -541,6 +655,8 @@
         lang: parsed.lang === 'zh' ? 'zh' : 'en',
         pollMs: Math.max(1000, Number(parsed.pollMs) || 1500),
         defaultTab: parsed.defaultTab || 'session',
+        sessionLayout: normalizeLayoutConfig(parsed.sessionLayout, DEFAULT_SESSION_ORDER),
+        overviewLayout: normalizeLayoutConfig(parsed.overviewLayout, DEFAULT_OVERVIEW_ORDER),
       };
     } catch {
       return base;
@@ -584,6 +700,7 @@
     || params.get('tab') === 'trace';
 
   function normalizeTabParam(raw) {
+    if (raw === 'settings') return 'settings';
     if (IS_TRACE_PANE) return 'trace';
     if (raw === 'project' || raw === 'global' || raw === 'session') return raw;
     if (raw === 'overview') return 'global';
@@ -592,6 +709,7 @@
 
   const state = {
     tab: IS_TRACE_PANE ? 'trace' : (normalizeTabParam(params.get('tab')) || normalizeTabParam(settings.defaultTab) || 'session'),
+    tabBeforeSettings: IS_TRACE_PANE ? 'trace' : 'session',
     inspectedConvId: null,
     lastHostConvId: '',
     currentProject: { workspace: '', workspaceUri: '' },
@@ -620,14 +738,23 @@
     // Overview state
     range: '30d',
     selectedDate: '',
+    customStart: '',
+    customEnd: '',
+    layoutEditorScope: 'session',
+    lastSessionLayoutSig: '',
     hmMode: 'tokens',
     skillSort: 'count',
+    toolSort: 'count',
+    cmdSort: 'count',
     skillQuery: '',
     sessionQuery: '',
     sessionWorkspace: '',
     sessionSort: 'recent',
     liveState: null,
     liveTickTimer: null,
+    updateInfo: null,
+    updateJob: null,
+    updatePollTimer: null,
     pollTimer: null,
     inFlight: false,
   };
@@ -672,26 +799,50 @@
     return res.json();
   }
 
+  async function apiPost(path, body = {}) {
+    const f = window.sidecar?.fetch ? window.sidecar.fetch.bind(window.sidecar) : fetch;
+    const res = await f(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${path}: ${res.status}`);
+    return res.json();
+  }
+
   /**
    * Adaptive per-session context ceiling:
    *  1. Default 500k per session.
-   *  2. Once the first compaction occurs, lock to that observed compaction peak.
-   *  3. If the session exceeds the current limit without compacting, auto-extend
-   *     cleanly in 100k (or 250k above 1M) steps so occupancy never overflows.
+   *  2. Once compaction occurs, lock to the observed compaction ceiling (so smaller
+   *     windows like 200k tighten automatically).
+   *  3. Whenever context exceeds the current ceiling, adopt that exact current /
+   *     historical max context directly (never rounding up by +100k), and retain
+   *     the historical peak as the ceiling on subsequent turns / post-compaction.
    */
-  function resolveSessionContextLimit(s) {
-    const firstCompact = Number(s?.compactions?.[0]?.from || s?.firstCompactionFrom || 0);
+  function resolveSessionContextLimit(s, extraObserved = 0) {
+    const compList = Array.isArray(s?.compactions) ? s.compactions : [];
+    const firstCompact = Number(compList[0]?.from || s?.firstCompactionFrom || 0);
+    const maxCompactFrom = compList.reduce((m, c) => Math.max(m, Number(c?.from || 0)), firstCompact);
+    const timeline = Array.isArray(s?.timeline) ? s.timeline : [];
+    let timelinePeak = 0;
+    for (let i = 0; i < timeline.length; i++) {
+      const pt = timeline[i];
+      const v = (Number(pt?.promptTokens) || 0) + (Number(pt?.outputTokens) || 0);
+      if (v > timelinePeak) timelinePeak = v;
+    }
     const observedPeak = Math.max(
       Number(s?.currentContext || 0),
       Number(s?.peakContext || 0),
       Number(s?.lastPromptTokens || 0),
+      Number(extraObserved || 0),
+      timelinePeak,
+      maxCompactFrom,
     );
     let limit = firstCompact > 0 ? firstCompact : DEFAULT_SESSION_CTX_LIMIT;
     let source = firstCompact > 0 ? 'compaction' : 'default';
 
     if (observedPeak > limit) {
-      const step = observedPeak > 1_000_000 ? 250_000 : 100_000;
-      limit = Math.ceil(observedPeak / step) * step;
+      limit = observedPeak;
       source = 'extended';
     }
     return { limit, source, observedPeak, firstCompact };
@@ -799,6 +950,9 @@
 
     models.forEach((mc, idx) => {
       if (!mc.total && !mc.calls) return;
+      const inTok = mc.inputTokens || 0;
+      const cacheTok = mc.cacheReadTokens || 0;
+      const outTok = mc.outputTokens || 0;
       rows.push({
         id: `model:${mc.model}`,
         kind: 'model',
@@ -811,6 +965,11 @@
         thinking: mc.thinking || 0,
         reply: mc.reply || 0,
         cacheHitRate: mc.cacheHitRate || 0,
+        inputTokens: inTok,
+        cacheReadTokens: cacheTok,
+        outputTokens: outTok,
+        totalTokens: mc.totalTokens || (inTok + cacheTok + outTok),
+        typeBreakdown: Array.isArray(mc.typeBreakdown) ? mc.typeBreakdown : null,
         items: Array.isArray(mc.items) ? mc.items : [],
       });
     });
@@ -823,90 +982,115 @@
     return { rows, usedSum, freeTokens };
   }
 
-  // ---------- Live In-Flight Pill & Hook Execution Card ----------
-  function updateLivePill() {
-    const pill = $('live-pill');
-    const lbl = $('live-label');
-    if (!pill || !lbl) return;
-    if (pill.classList.contains('stale')) return;
-
+  // ---------- Live Generating Row Timer & Hook Execution Card ----------
+  function isLiveGenerating() {
     const ls = state.liveState;
-    const isBusy = Boolean(ls && ls.active && !state.inspectedConvId && (state.tab === 'session' || state.tab === 'trace'));
-    if (isBusy) {
-      const elapsedMs = Math.max(100, Date.now() - (ls.sinceMs || Date.now()));
-      const elapsedText = elapsedMs >= 60_000 ? fmtDur(elapsedMs) : `${(elapsedMs / 1000).toFixed(1)}s`;
-      const phaseKey = ls.phase === 'tools' ? 'live.tools' : 'live.generating';
-      pill.classList.add('busy');
-      pill.classList.toggle('phase-tools', ls.phase === 'tools');
-      lbl.textContent = `${t(phaseKey)} · ${elapsedText}`;
+    return Boolean(ls && ls.active && ls.phase === 'generating' && !state.inspectedConvId);
+  }
+
+  function updateGeneratingTicker() {
+    const el = $('trace-gen-elapsed');
+    if (isLiveGenerating() && state.tab === 'trace') {
+      if (el) {
+        const elapsedMs = Math.max(100, Date.now() - (state.liveState.sinceMs || Date.now()));
+        el.textContent = elapsedMs >= 60_000 ? fmtDur(elapsedMs) : `${(elapsedMs / 1000).toFixed(1)}s`;
+      }
       if (!state.liveTickTimer) {
-        state.liveTickTimer = setInterval(updateLivePill, 250);
+        state.liveTickTimer = setInterval(updateGeneratingTicker, 250);
       }
-    } else {
-      pill.classList.remove('busy', 'phase-tools');
-      lbl.textContent = t('live.ok');
-      if (state.liveTickTimer) {
-        clearInterval(state.liveTickTimer);
-        state.liveTickTimer = null;
-      }
+    } else if (state.liveTickTimer) {
+      clearInterval(state.liveTickTimer);
+      state.liveTickTimer = null;
     }
   }
 
   function setLiveState(ls) {
     state.liveState = ls && ls.active ? ls : null;
-    updateLivePill();
+    updateGeneratingTicker();
   }
 
-  function renderHooksCard(cardEl, metaEl, statsEl, reasonsEl, data) {
+  function renderToolExecCard(cardEl, metaEl, barEl, statsEl, reasonsEl, { toolsList = [], totalExecMs = 0, hookData = null } = {}) {
     if (!cardEl) return;
-    const turnStats = data?.turnStats || data || {};
-    const toolStats = data?.toolStats || { calls: data?.toolCalls || 0, errors: data?.toolErrors || 0 };
-    const completedTurns = turnStats.completedTurns || 0;
-    const toolCalls = toolStats.calls || 0;
-    const toolErrors = toolStats.errors || 0;
-    const hasData = Boolean(data?.hasData && (completedTurns > 0 || toolCalls > 0));
+    const list = Array.isArray(toolsList) ? toolsList : Object.values(toolsList || {});
+    const totalCalls = list.reduce((a, x) => a + (x.count || 0), 0);
+    const failedCalls = list.reduce((a, x) => a + (x.errors || 0), 0);
+    const succeededCalls = Math.max(0, totalCalls - failedCalls);
+    const sumDurMs = list.reduce((a, x) => a + (x.durationMs || 0), 0);
+    const durMs = sumDurMs > 0 ? sumDurMs : (totalExecMs || 0);
 
-    cardEl.classList.toggle('hidden', !hasData);
-    if (!hasData) return;
+    cardEl.classList.toggle('hidden', totalCalls === 0);
+    if (totalCalls === 0) return;
 
-    metaEl.textContent = completedTurns > 0 ? t('hooks.turnsCount', { n: completedTurns }) : '';
+    metaEl.textContent = t('hooks.callsCount', { n: totalCalls });
 
-    const avgTurn = completedTurns > 0 ? fmtDur(turnStats.avgTurnMs || 0) : '—';
-    const maxTurnSub = completedTurns > 0 && turnStats.maxTurnMs ? t('hooks.maxTurn', { v: fmtDur(turnStats.maxTurnMs) }) : '';
-    const avgDepth = completedTurns > 0 ? String(turnStats.avgInvocations || 0) : '—';
-    const errRateText = toolCalls > 0 ? `${Math.round((toolErrors / toolCalls) * 100)}%` : '';
-    const errVal = toolCalls > 0 ? `${toolErrors}${errRateText ? ` (${errRateText})` : ''}` : '0';
+    const okPct = totalCalls > 0 ? succeededCalls / totalCalls : 1;
+    const errPct = totalCalls > 0 ? failedCalls / totalCalls : 0;
+    if (barEl) {
+      barEl.innerHTML = [
+        succeededCalls > 0 ? `<div class="ctx-seg" style="width:${(okPct * 100).toFixed(2)}%;background:var(--green)" title="${esc(t('hooks.success'))}: ${succeededCalls}"></div>` : '',
+        failedCalls > 0 ? `<div class="ctx-seg" style="width:${(errPct * 100).toFixed(2)}%;background:var(--rose)" title="${esc(t('hooks.failed'))}: ${failedCalls}"></div>` : '',
+      ].join('');
+    }
+
+    const avgMs = totalCalls > 0 && durMs > 0 ? Math.round(durMs / totalCalls) : 0;
+    const avgText = avgMs > 0
+      ? (avgMs < 1000 ? `${avgMs}ms` : `${(avgMs / 1000).toFixed(1)}s`)
+      : '—';
 
     statsEl.innerHTML = `
       <div class="hooks-stat-cell">
-        <div class="hooks-stat-label">${esc(t('hooks.avgTurn'))}</div>
-        <div class="hooks-stat-val">${esc(avgTurn)}</div>
-        <div class="hooks-stat-sub">${esc(maxTurnSub)}</div>
+        <div class="hooks-stat-label">${esc(t('hooks.success'))}</div>
+        <div class="hooks-stat-val ok">${succeededCalls}</div>
+        <div class="hooks-stat-sub">${fmtPct(okPct, 1)}</div>
       </div>
       <div class="hooks-stat-cell">
-        <div class="hooks-stat-label">${esc(t('hooks.loopDepth'))}</div>
-        <div class="hooks-stat-val">${esc(avgDepth)}</div>
-        <div class="hooks-stat-sub">${esc(t('hooks.callsPerTurn'))}</div>
+        <div class="hooks-stat-label">${esc(t('hooks.failed'))}</div>
+        <div class="hooks-stat-val${failedCalls > 0 ? ' err' : ''}">${failedCalls}</div>
+        <div class="hooks-stat-sub">${fmtPct(errPct, 1)}</div>
       </div>
       <div class="hooks-stat-cell">
-        <div class="hooks-stat-label">${esc(t('hooks.toolErrors'))}</div>
-        <div class="hooks-stat-val${toolErrors > 0 ? ' err' : ' ok'}">${esc(errVal)}</div>
-        <div class="hooks-stat-sub">${esc(t('hooks.toolCallsSub', { n: toolCalls }))}</div>
+        <div class="hooks-stat-label">${esc(t('hooks.toolTime'))}</div>
+        <div class="hooks-stat-val">${durMs > 0 ? fmtDur(durMs) : '—'}</div>
+        <div class="hooks-stat-sub">${esc(t('hooks.avgCall', { v: avgText }))}</div>
       </div>
     `;
 
-    const reasons = turnStats.reasons || {};
-    const reasonEntries = Object.entries(reasons).filter(([, cnt]) => cnt > 0);
-    reasonEntries.sort((a, b) => b[1] - a[1]);
-    reasonsEl.innerHTML = reasonEntries.map(([code, cnt]) => {
+    // Only surface non-normal stop reasons (e.g. Canceled / Error / Budget cap); never noisy "Done N"
+    const reasons = hookData?.turnStats?.reasons || hookData?.reasons || {};
+    const abnormalReasons = Object.entries(reasons)
+      .filter(([code, cnt]) => code !== 'NO_TOOL_CALL' && cnt > 0)
+      .sort((a, b) => b[1] - a[1]);
+    reasonsEl.innerHTML = abnormalReasons.map(([code, cnt]) => {
       const i18nKey = `hooks.reason.${code}`;
       const label = (I18N[settings.lang]?.[i18nKey] || I18N.en[i18nKey]) ? t(i18nKey) : code;
-      const cls = code === 'NO_TOOL_CALL' ? 'ok'
-        : code === 'USER_CANCELED' ? 'warn'
-        : code === 'ERROR' ? 'err'
-        : '';
+      const cls = code === 'USER_CANCELED' ? 'warn' : code === 'ERROR' ? 'err' : '';
       return `<span class="reason-pill ${cls}">${esc(label)} <strong>${cnt}</strong></span>`;
     }).join('');
+  }
+
+  // ---------- Shared Time Breakdown Renderer (Session / Project / Global) ----------
+  function renderTimingBreakdown(barEl, legendEl, speedEl, tm) {
+    if (!barEl || !legendEl) return;
+    const timing = tm || {};
+    if (speedEl) speedEl.textContent = t('ov.speed', { v: timing.outputTokPerSec || 0 });
+    const tmSegs = TIMING_META.map((x) => ({ ...x, label: t(`time.${x.key}`), value: timing[x.key] || 0 }));
+    const tmTotal = tmSegs.reduce((a, x) => a + x.value, 0) || 1;
+    barEl.innerHTML = tmSegs
+      .filter((x) => x.value > 0)
+      .map((x) => `<div class="ctx-seg" style="width:${((x.value / tmTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtDur(x.value)}"></div>`)
+      .join('');
+    legendEl.innerHTML = tmSegs.map((x) => `
+      <div class="comp-item" title="${esc(x.label)}: ${fmtDur(x.value)} (${fmtPct(x.value / tmTotal, 1)})">
+        <div class="comp-left">
+          <span class="comp-dot" style="background:${x.color}"></span>
+          <span class="comp-name">${esc(x.label)}</span>
+        </div>
+        <div class="comp-right">
+          <span class="comp-sub">${fmtDur(x.value)}</span>
+          <span class="comp-pct">${fmtPct(x.value / tmTotal, 1)}</span>
+        </div>
+      </div>
+    `).join('');
   }
 
   // ---------- Shared Per-Model Usage Renderer (Session / Project / Global) ----------
@@ -975,15 +1159,17 @@
     $('session-empty').classList.add('hidden');
     $('session-content').classList.remove('hidden');
 
-    const ctxMeta = resolveSessionContextLimit(s);
+    const baseRows = buildSessionRows(s, DEFAULT_SESSION_CTX_LIMIT);
+    const ctxMeta = resolveSessionContextLimit(s, baseRows.usedSum);
     const ctxLimit = ctxMeta.limit;
-    const { rows, usedSum, freeTokens } = buildSessionRows(s, ctxLimit);
+    const rows = baseRows.rows;
+    const usedSum = baseRows.usedSum;
+    const freeTokens = Math.max(0, ctxLimit - usedSum);
     const used = usedSum || s.currentContext || s.lastPromptTokens || 0;
     const ratio = Math.min(1, used / ctxLimit);
     const speed = s.timing?.outputTokPerSec || 0;
 
-    // Top metadata line: model chip + compactions (if any) + speed
-    $('s-model').textContent = s.model || 'default';
+    // Compaction count chip (displayed right beside % above the context bar)
     const compList = s.compactions || [];
     const compCount = compList.length;
     const compChip = $('s-compactions');
@@ -997,8 +1183,6 @@
       compChip.title = '';
     }
 
-    $('s-speed-chip').textContent = `${speed} tok/s`;
-
     // Occupancy headline
     $('s-ctx-used').textContent = fmtTokens(used);
     const limitEl = $('s-ctx-limit');
@@ -1009,6 +1193,15 @@
         ? t('session.limitExtended', { v: fmtTokens(ctxMeta.observedPeak) })
         : t('session.limitDefault');
     $('s-ctx-pct').textContent = fmtPct(ratio, 1);
+    const ringWrap = $('s-ctx-ring-wrap');
+    const ringArc = $('s-ctx-ring-arc');
+    if (ringWrap && ringArc) {
+      const RING_CIRC = 2 * Math.PI * 9.2;
+      ringArc.style.strokeDasharray = RING_CIRC.toFixed(2);
+      ringArc.style.strokeDashoffset = (RING_CIRC * (1 - Math.max(0, Math.min(1, ratio)))).toFixed(2);
+      ringWrap.classList.toggle('level-crit', ratio >= 0.9);
+      ringWrap.classList.toggle('level-warn', ratio >= 0.8 && ratio < 0.9);
+    }
 
     // Sub strip (free, cached, turns/steps)
     const lastPoint = s.timeline?.[s.timeline.length - 1];
@@ -1090,28 +1283,146 @@
         }).sort((a, b) => b.totalTokens - a.totalTokens);
     renderModelsCard($('s-models-list'), $('s-models-bar'), $('s-models-meta'), sessModels, { showSessions: false });
 
-    // Lifecycle Hook Turn & Execution Telemetry (Session)
-    renderHooksCard($('s-hooks-card'), $('s-hooks-meta'), $('s-hooks-stats'), $('s-hooks-reasons'), s.hookTelemetry);
+    // Time Breakdown (Session)
+    renderTimingBreakdown($('s-timing-bar'), $('s-timing-legend'), $('s-timing-speed'), s.timing);
 
-    // Context Trend Chart (hover tooltips only, no step box below)
-    renderTrendChart(s.timeline || [], ctxLimit);
+    // Tool Execution Summary (Session)
+    renderToolExecCard($('s-hooks-card'), $('s-hooks-meta'), $('s-hooks-bar'), $('s-hooks-stats'), $('s-hooks-reasons'), {
+      toolsList: s.tools,
+      totalExecMs: s.timing?.toolExecMs || 0,
+      hookData: s.hookTelemetry,
+    });
+
+    // Smooth Context Trend Curve (all steps)
+    renderTrendChart(s.timeline || []);
 
     // Recent Trace (latest chronological events)
     renderRecentTrace(s);
+
+    // Ensure 2-column responsive balance matches current visibility & order
+    applySessionLayout();
+  }
+
+  function applySessionLayout(force = false) {
+    const container = $('session-content');
+    const colLeft = $('session-col-left');
+    const colRight = $('session-col-right');
+    if (!container || !colLeft || !colRight) return;
+
+    const layout = settings.sessionLayout || { order: DEFAULT_SESSION_ORDER, hidden: [] };
+    const hiddenSet = new Set(layout.hidden || []);
+    const cardMap = {};
+    container.querySelectorAll('[data-card-id]').forEach((el) => {
+      cardMap[el.dataset.cardId] = el;
+    });
+
+    const leftIds = [];
+    const rightIds = [];
+    const parkedIds = [];
+    let leftW = 0;
+    let rightW = 0;
+
+    layout.order.forEach((id, idx) => {
+      const el = cardMap[id];
+      if (!el) return;
+      const userHidden = hiddenSet.has(id);
+      el.classList.toggle('layout-hidden', userHidden);
+      el.style.order = String(idx + 1);
+      const dataHidden = el.classList.contains('hidden');
+      if (userHidden || dataHidden) {
+        parkedIds.push(id);
+        return;
+      }
+      const w = SESSION_CARD_WEIGHTS[id] || 150;
+      if (leftW <= rightW) {
+        leftIds.push(id);
+        leftW += w;
+      } else {
+        rightIds.push(id);
+        rightW += w;
+      }
+    });
+
+    const sig = `${leftIds.join(',')}|${rightIds.join(',')}|${parkedIds.join(',')}|${layout.order.join(',')}`;
+    if (!force && sig === state.lastSessionLayoutSig) return;
+    state.lastSessionLayoutSig = sig;
+
+    leftIds.forEach((id) => {
+      if (cardMap[id]) colLeft.appendChild(cardMap[id]);
+    });
+    rightIds.forEach((id) => {
+      if (cardMap[id]) colRight.appendChild(cardMap[id]);
+    });
+    parkedIds.forEach((id) => {
+      if (cardMap[id]) colRight.appendChild(cardMap[id]);
+    });
+
+    const leftEmpty = leftIds.length === 0;
+    const rightEmpty = rightIds.length === 0;
+    colLeft.classList.toggle('col-empty', leftEmpty);
+    colRight.classList.toggle('col-empty', rightEmpty);
+    container.classList.toggle('single-col', leftEmpty || rightEmpty);
+  }
+
+  function applyOverviewLayout() {
+    const wrap = $('ov-sections');
+    if (!wrap) return;
+    const layout = settings.overviewLayout || { order: DEFAULT_OVERVIEW_ORDER, hidden: [] };
+    const hiddenSet = new Set(layout.hidden || []);
+    const map = {};
+    wrap.querySelectorAll('[data-ov-card]').forEach((el) => {
+      map[el.dataset.ovCard] = el;
+    });
+    layout.order.forEach((id) => {
+      const el = map[id];
+      if (!el) return;
+      el.classList.toggle('layout-hidden', hiddenSet.has(id));
+      wrap.appendChild(el);
+    });
+  }
+
+  function applyContextLayout(force = false) {
+    applySessionLayout(force);
+    applyOverviewLayout();
+  }
+
+  function isBreakdownRowExpandable(r) {
+    if (!r) return false;
+    if (r.kind === 'model') return true;
+    if (r.key === 'system_prompt' || r.key === 'tool_definitions') return false;
+    return Array.isArray(r.items) && r.items.length > 0;
   }
 
   function renderBreakdownList(rows, freeTokens, ctxLimit) {
     const listEl = $('s-breakdown-list');
-    const expandableIds = rows.map((r) => r.id);
+    const expandableIds = rows.filter(isBreakdownRowExpandable).map((r) => r.id);
     const allOpen = expandableIds.length > 0 && expandableIds.every((id) => state.expandedKeys.has(id));
     $('btn-toggle-all').textContent = t(allOpen ? 'action.collapseAll' : 'action.expandAll');
 
     const sortBySizeDesc = (items) => [...items].sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
 
     const rowHtml = rows.map((r) => {
-      const isOpen = state.expandedKeys.has(r.id);
+      const expandable = isBreakdownRowExpandable(r);
       const pct = fmtPct(r.value / ctxLimit, 1);
-      const sorted = sortBySizeDesc(r.items || []);
+
+      if (!expandable) {
+        return `
+          <div class="bd-row">
+            <div class="bd-left">
+              <span class="bd-chevron placeholder"></span>
+              <span class="bd-dot" style="background:${r.color}"></span>
+              <span class="bd-name">${esc(r.label)}</span>
+            </div>
+            <div class="bd-right">
+              <span class="bd-tok">${fmtTokens(r.value)}</span>
+              <span class="bd-pct">${pct}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      const isOpen = state.expandedKeys.has(r.id);
+      const sorted = r.kind === 'model' ? [] : sortBySizeDesc(r.items || []);
       const visible = sorted.slice(0, 16);
       const hiddenCount = Math.max(0, sorted.length - visible.length);
 
@@ -1119,57 +1430,84 @@
       if (r.kind === 'model') {
         childrenInner += `
           <div class="bd-model-summary">
-            <span>${esc(t('model.thinking'))} <strong>${fmtTokens(r.thinking)}</strong></span>
-            <span>${esc(t('model.replies'))} <strong>${fmtTokens(r.reply)}</strong></span>
+            <span>${esc(t('model.calls'))} <strong>${r.count || 0}</strong></span>
             <span>${esc(t('model.cache'))} <strong>${fmtPct(r.cacheHitRate, 1)}</strong></span>
-            <span>${esc(t('model.speed'))} <strong>${r.speed} tok/s</strong></span>
+            <span>${esc(t('model.speed'))} <strong>${r.speed || 0} tok/s</strong></span>
           </div>
         `;
-        if (visible.length) {
-          childrenInner += visible.map((it, idx) => {
-            const itemKey = `${r.id}:${it.step}:${idx}`;
-            const hasDetail = !!(it.preview && it.preview.length > 0);
-            const itemOpen = hasDetail && state.expandedItems.has(itemKey);
+        // Aggregate by token type (Cache, Text input, Image input, Thinking, Tool call, Text output)
+        let typeRows = r.typeBreakdown;
+        if (!Array.isArray(typeRows)) {
+          const outSum = r.outputTokens || ((r.thinking || 0) + (r.reply || 0));
+          const toolEst = Math.max(0, outSum - (r.thinking || 0) - (r.reply || 0));
+          typeRows = [
+            { type: 'cache_read', tokens: r.cacheReadTokens || 0, rate: r.cacheHitRate || 0 },
+            { type: 'text_input', tokens: r.inputTokens || 0 },
+            { type: 'thinking', tokens: r.thinking || 0 },
+            { type: 'tool_call', tokens: toolEst },
+            { type: 'reply', tokens: r.reply || 0 },
+          ].filter((x) => x.tokens > 0);
+        }
+        const typeTotal = typeRows.reduce((a, x) => a + (x.tokens || 0), 0) || r.totalTokens || 1;
+        if (typeRows.length) {
+          childrenInner += typeRows.map((tb) => {
+            const dotColor = MODEL_TYPE_COLORS[tb.type] || 'var(--fg-muted)';
+            const label = t(`mtype.${tb.type}`);
+            let tag = '';
+            if (tb.type === 'cache_read' && tb.rate > 0) {
+              tag = `<span class="bd-child-tag">${fmtPct(tb.rate, 1)}</span>`;
+            } else if ((tb.type === 'image_input' || tb.type === 'tool_call') && tb.count > 0) {
+              tag = `<span class="bd-child-tag">×${tb.count}</span>`;
+            }
             return `
-              <div class="bd-child${hasDetail ? ' has-detail' : ''}${itemOpen ? ' open' : ''}" data-item-key="${esc(itemKey)}">
+              <div class="bd-child">
                 <div class="bd-child-main">
                   <div class="bd-child-left">
-                    <span class="bd-child-tag">#${it.step}</span>
-                    <span class="bd-child-label">${esc(it.preview || `${t('model.thinking')} ${fmtTokens(it.thinkingTokens)} · ${t('model.replies')} ${fmtTokens(it.replyTokens)}`)}</span>
+                    <span class="bd-child-dot" style="background:${dotColor}"></span>
+                    <span class="bd-child-label">${esc(label)}</span>
+                    ${tag}
                   </div>
                   <div class="bd-child-right">
-                    <span class="bd-child-tok">+${fmtTokens(it.tokens)}</span>
+                    <span class="bd-child-tok">${fmtTokens(tb.tokens)}</span>
+                    <span class="bd-child-pct">${fmtPct(tb.tokens / typeTotal, 1)}</span>
                   </div>
                 </div>
-                ${hasDetail ? `<div class="bd-child-preview">${esc(it.preview)}</div>` : ''}
               </div>
             `;
           }).join('');
+        } else {
+          childrenInner += `<div class="bd-more">${esc(t('items.empty'))}</div>`;
         }
       } else if (visible.length) {
-        childrenInner += visible.map((it, idx) => {
-          const itemKey = `${r.id}:${it.step || 0}:${it.label || idx}`;
-          const previewText = it.preview || (it.detail && it.detail !== it.label ? it.detail : '');
-          const hasDetail = !!previewText;
-          const itemOpen = hasDetail && state.expandedItems.has(itemKey);
+        childrenInner += visible.map((it) => {
+          const isSkillRow = r.key === 'skill_injection' || it.tool === 'skill';
+          const isToolRow = r.key === 'tool_calls';
+          const isFailedTool = isToolRow && (it.failed || it.status === 'ERROR');
+          const isInjectedRow = r.key === 'injected_content';
+          const showToolTag = !isSkillRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
+          const childLabel = isInjectedRow && it.group && (I18N[settings.lang]?.[`inj.${it.group}`] || I18N.en[`inj.${it.group}`])
+            ? t(`inj.${it.group}`)
+            : (it.label || '');
+          let countPill = '';
+          if (isFailedTool) {
+            const errTxt = it.count > 1 ? `${t('trace.error')} ×${it.count}` : t('trace.error');
+            countPill = `<span class="bd-child-tag err">${esc(errTxt)}</span>`;
+          } else if ((isInjectedRow || isSkillRow || isToolRow) && it.count > 1) {
+            countPill = `<span class="bd-child-tag">×${it.count}</span>`;
+          }
           return `
-            <div class="bd-child${hasDetail ? ' has-detail' : ''}${itemOpen ? ' open' : ''}" data-item-key="${esc(itemKey)}">
+            <div class="bd-child">
               <div class="bd-child-main">
                 <div class="bd-child-left">
-                  ${it.tool && it.tool !== 'user' && it.tool !== 'system' ? `<span class="bd-child-tag${it.status === 'ERROR' ? ' err' : ''}">${esc(it.tool)}</span>` : ''}
-                  <span class="bd-child-label">${esc(it.label || '')}</span>
+                  ${showToolTag ? `<span class="bd-child-tag${it.status === 'ERROR' ? ' err' : ''}">${esc(it.tool)}</span>` : ''}
+                  <span class="bd-child-label${isToolRow ? ' mono' : ''}">${esc(childLabel)}</span>
+                  ${countPill}
                 </div>
                 <div class="bd-child-right">
                   ${it.step ? `<span>#${it.step}</span>` : ''}
-                  <span class="bd-child-tok">${r.key === 'system_prompt' || r.key === 'tool_definitions' ? '' : '+'}${fmtTokens(it.tokens)}</span>
+                  <span class="bd-child-tok">+${fmtTokens(it.tokens)}</span>
                 </div>
               </div>
-              ${hasDetail ? `
-                <div class="bd-child-preview">
-                  ${it.detail && it.preview && it.detail !== it.preview ? `<div class="bd-child-path">${esc(it.detail)}</div>` : ''}
-                  ${esc(previewText)}
-                </div>
-              ` : ''}
             </div>
           `;
         }).join('');
@@ -1230,17 +1568,53 @@
         $('btn-toggle-all').textContent = t(allNow ? 'action.collapseAll' : 'action.expandAll');
       });
     });
+  }
 
-    listEl.querySelectorAll('.bd-child.has-detail').forEach((child) => {
-      child.addEventListener('click', (e) => {
-        if (e.target.closest('.bd-child-preview')) return; // allow text selection inside preview
-        const key = child.dataset.itemKey;
-        const willOpen = !state.expandedItems.has(key);
-        if (willOpen) state.expandedItems.add(key);
-        else state.expandedItems.delete(key);
-        child.classList.toggle('open', willOpen);
-      });
-    });
+  /**
+   * Builds a smooth monotone cubic Bezier SVG path (Fritsch-Carlson) that never
+   * overshoots below 0 or past steep compaction cliffs.
+   */
+  function smoothMonotonePath(coords) {
+    const n = coords.length;
+    if (n === 0) return '';
+    if (n === 1) return `M${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)}`;
+    if (n === 2) {
+      return `M${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)} L${coords[1][0].toFixed(1)},${coords[1][1].toFixed(1)}`;
+    }
+    const dx = new Array(n - 1);
+    const dy = new Array(n - 1);
+    const m = new Array(n - 1);
+    for (let i = 0; i < n - 1; i++) {
+      dx[i] = coords[i + 1][0] - coords[i][0];
+      dy[i] = coords[i + 1][1] - coords[i][1];
+      m[i] = dx[i] !== 0 ? dy[i] / dx[i] : 0;
+    }
+    const tangents = new Array(n);
+    tangents[0] = m[0];
+    tangents[n - 1] = m[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      if (m[i - 1] * m[i] <= 0) {
+        tangents[i] = 0;
+      } else {
+        const w1 = 2 * dx[i] + dx[i - 1];
+        const w2 = dx[i] + 2 * dx[i - 1];
+        tangents[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i]);
+      }
+    }
+    let d = `M${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const x0 = coords[i][0];
+      const y0 = coords[i][1];
+      const x1 = coords[i + 1][0];
+      const y1 = coords[i + 1][1];
+      const h = (x1 - x0) / 3;
+      const cx1 = x0 + h;
+      const cy1 = y0 + tangents[i] * h;
+      const cx2 = x1 - h;
+      const cy2 = y1 - tangents[i + 1] * h;
+      d += ` C${cx1.toFixed(1)},${cy1.toFixed(1)} ${cx2.toFixed(1)},${cy2.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+    }
+    return d;
   }
 
   function renderTrendChart(allPoints) {
@@ -1251,9 +1625,7 @@
       return;
     }
 
-    const offset = state.trendSpan === '24' && allPoints.length > 24 ? allPoints.length - 24 : 0;
-    const points = allPoints.slice(offset);
-
+    const points = allPoints;
     const W = 400;
     const H = 112;
     const padL = 36;
@@ -1262,108 +1634,154 @@
     const padB = 20;
     const plotW = W - padL - padR;
     const plotH = H - padT - padB;
+    const baseY = padT + plotH;
 
     const maxTok = Math.max(...points.map((p) => p.promptTokens), 1000);
     const yMax = Math.max(maxTok * 1.12, 1000);
     const yOf = (v) => padT + plotH - (Math.min(yMax, Math.max(0, v)) / yMax) * plotH;
+    const xOf = (i) => (points.length === 1 ? padL + plotW / 2 : padL + (i / (points.length - 1)) * plotW);
 
     const yTicks = [0, 0.5, 1].map((f) => ({
       y: padT + plotH * (1 - f),
       label: fmtTokens(yMax * f),
     }));
 
-    const stackOrder = [
-      { key: 'system', color: 'var(--blue)' },
-      { key: 'user', color: 'var(--green)' },
-      { key: 'skill', color: 'var(--pink)' },
-      { key: 'tools', color: 'var(--cyan)' },
-      { key: 'model', color: 'var(--violet)' },
-    ];
+    const coords = points.map((p, i) => [xOf(i), yOf(p.promptTokens)]);
 
-    let seriesSvg = '';
-    if (state.trendMode === 'stacked') {
-      const slotW = plotW / points.length;
-      const barW = Math.min(16, Math.max(3, slotW * 0.72));
-      seriesSvg = points.map((p, i) => {
-        const globalIdx = offset + i;
-        const cx = padL + slotW * i + slotW / 2;
-        const x = cx - barW / 2;
-        const b = p.buckets || { system: 0, user: 0, skill: 0, tools: p.promptTokens, model: 0 };
-        let cum = 0;
-        const rects = [];
-        for (const s of stackOrder) {
-          const val = b[s.key] || 0;
-          if (val <= 0) continue;
-          const y1 = yOf(cum + val);
-          const y0 = yOf(cum);
-          const h = Math.max(0.8, y0 - y1);
-          rects.push(`<rect x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${s.color}"/>`);
-          cum += val;
-        }
-        return `
-          <g class="trend-hit" data-gidx="${globalIdx}">
-            <rect x="${(padL + slotW * i).toFixed(1)}" y="${padT}" width="${slotW.toFixed(1)}" height="${plotH}" fill="transparent"/>
-            ${rects.join('')}
-            ${p.compacted ? `<circle cx="${cx.toFixed(1)}" cy="${Math.max(padT + 4, yOf(p.promptTokens) - 5).toFixed(1)}" r="2.8" fill="var(--amber)"/>` : ''}
-          </g>
-        `;
-      }).join('');
-    } else {
-      const xOf = (i) => (points.length === 1 ? padL + plotW / 2 : padL + (i / (points.length - 1)) * plotW);
-      const coords = points.map((p, i) => [xOf(i), yOf(p.promptTokens)]);
-      const lineD = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-      const areaD = `${lineD} L${coords[coords.length - 1][0].toFixed(1)},${(padT + plotH).toFixed(1)} L${coords[0][0].toFixed(1)},${(padT + plotH).toFixed(1)} Z`;
-      seriesSvg = `
-        <defs>
-          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.28"/>
-            <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0.02"/>
-          </linearGradient>
-        </defs>
-        <path d="${areaD}" fill="url(#trendGrad)"/>
-        <path d="${lineD}" fill="none" stroke="var(--cyan)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
-        ${points.map((p, i) => {
-          const globalIdx = offset + i;
-          const [x, y] = coords[i];
-          const r = p.compacted ? 3.5 : 2.3;
-          const fill = p.compacted ? 'var(--amber)' : 'var(--cyan)';
-          return `<circle class="trend-hit" data-gidx="${globalIdx}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${fill}" stroke="var(--card)" stroke-width="1.2"/>`;
-        }).join('')}
-      `;
+    // Split into separate contiguous segments at every compaction point (no bridge line across drops)
+    const segments = [];
+    const breakXs = [];
+    let curSeg = [];
+    for (let i = 0; i < points.length; i++) {
+      if (i > 0 && points[i].compacted && curSeg.length) {
+        segments.push(curSeg);
+        breakXs.push((coords[i - 1][0] + coords[i][0]) / 2);
+        curSeg = [];
+      }
+      curSeg.push(coords[i]);
     }
+    if (curSeg.length) segments.push(curSeg);
+
+    const segmentsSvg = segments.map((seg) => {
+      if (seg.length === 1) {
+        const [x, y] = seg[0];
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.2" fill="var(--cyan)"/>`;
+      }
+      const lineD = smoothMonotonePath(seg);
+      const areaD = `${lineD} L${seg[seg.length - 1][0].toFixed(1)},${baseY.toFixed(1)} L${seg[0][0].toFixed(1)},${baseY.toFixed(1)} Z`;
+      return `
+        <path d="${areaD}" fill="url(#trendGrad)"/>
+        <path d="${lineD}" fill="none" stroke="var(--cyan)" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/>
+      `;
+    }).join('');
+
+    const breaksSvg = breakXs.map((bx) => `
+      <line x1="${bx.toFixed(1)}" y1="${padT}" x2="${bx.toFixed(1)}" y2="${baseY}" stroke="var(--amber)" stroke-opacity="0.45" stroke-width="1" stroke-dasharray="2 2"/>
+    `).join('');
 
     el.innerHTML = `
       <svg viewBox="0 0 ${W} ${H}">
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.26"/>
+            <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
         ${yTicks.map((tk) => `
           <line x1="${padL}" y1="${tk.y.toFixed(1)}" x2="${W - padR}" y2="${tk.y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
           <text x="${padL - 4}" y="${(tk.y + 3).toFixed(1)}" text-anchor="end" fill="var(--fg-muted)" font-size="9">${esc(tk.label)}</text>
         `).join('')}
-        ${seriesSvg}
+        ${breaksSvg}
+        ${segmentsSvg}
+        <line id="trend-crosshair" x1="0" y1="${padT}" x2="0" y2="${baseY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>
+        <circle id="trend-hover-dot" cx="0" cy="0" r="3.2" fill="var(--cyan)" stroke="var(--card)" stroke-width="1.5" style="display:none"/>
+        <rect id="trend-overlay" x="${padL}" y="${padT}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair"/>
         <text x="${padL}" y="${H - 4}" fill="var(--fg-muted)" font-size="9">#${points[0].step}</text>
         <text x="${W - padR}" y="${H - 4}" text-anchor="end" fill="var(--fg-muted)" font-size="9">#${points[points.length - 1].step}</text>
       </svg>
     `;
 
-    el.querySelectorAll('.trend-hit').forEach((node) => {
-      const p = allPoints[Number(node.dataset.gidx)];
-      node.addEventListener('mouseenter', (e) => {
+    const svg = el.querySelector('svg');
+    const overlay = el.querySelector('#trend-overlay');
+    const guide = el.querySelector('#trend-crosshair');
+    const hoverDot = el.querySelector('#trend-hover-dot');
+    if (overlay && svg) {
+      const onMove = (e) => {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        const svgX = ((e.clientX - rect.left) / rect.width) * W;
+        const ratio = points.length === 1 ? 0 : Math.max(0, Math.min(1, (svgX - padL) / plotW));
+        const idx = Math.round(ratio * (points.length - 1));
+        const p = points[idx];
+        const [cx, cy] = coords[idx];
+        if (guide) {
+          guide.setAttribute('x1', cx.toFixed(1));
+          guide.setAttribute('x2', cx.toFixed(1));
+          guide.style.display = '';
+        }
+        if (hoverDot) {
+          hoverDot.setAttribute('cx', cx.toFixed(1));
+          hoverDot.setAttribute('cy', cy.toFixed(1));
+          hoverDot.setAttribute('fill', p.compacted ? 'var(--amber)' : 'var(--cyan)');
+          hoverDot.style.display = '';
+        }
         const sign = p.delta >= 0 ? '+' : '';
         const cachePct = p.promptTokens > 0 ? fmtPct(p.cacheReadTokens / p.promptTokens, 1) : '0%';
         showTip(e, `
-          <div><strong>${esc(t('step.label', { step: p.step }))}</strong> · ${esc(t('step.turn', { turn: p.turn || 1 }))}</div>
+          <div><strong>${esc(t('step.label', { step: p.step }))}</strong> · ${esc(t('step.turn', { turn: p.turn || 1 }))}${p.compacted ? ` · <span style="color:var(--amber)">${esc(t('step.compacted'))}</span>` : ''}</div>
           <div>${esc(t('step.prompt'))}: <strong>${fmtTokens(p.promptTokens)}</strong> (${sign}${fmtTokens(p.delta)})</div>
-          <div>${esc(t('session.cached'))}: ${cachePct} · ${esc(t('step.output'))}: ${fmtTokens(p.outputTokens)} · ${p.tokPerSec} tok/s</div>
+          <div>${esc(t('session.cached'))}: ${cachePct} · ${esc(t('step.output'))}: ${fmtTokens(p.outputTokens)}${p.tokPerSec ? ` · ${p.tokPerSec} tok/s` : ''}</div>
         `);
+      };
+      overlay.addEventListener('mousemove', onMove);
+      overlay.addEventListener('mouseenter', onMove);
+      overlay.addEventListener('mouseleave', () => {
+        if (guide) guide.style.display = 'none';
+        if (hoverDot) hoverDot.style.display = 'none';
+        hideTip();
       });
-      node.addEventListener('mousemove', moveTip);
-      node.addEventListener('mouseleave', hideTip);
-    });
+    }
   }
 
-  function isTimeContextItem(it) {
-    if (!it || it.kind !== 'system') return false;
-    return it.systemBadge === 'time_context'
-      || (it.systemType === 'ADDITIONAL_METADATA' && /The current local time is:/i.test(it.preview || it.content || ''));
+  function getSystemBadges(it) {
+    if (!it || it.kind !== 'system') return [];
+    const set = new Set();
+    if (Array.isArray(it.systemBadges)) {
+      for (const b of it.systemBadges) if (b) set.add(b);
+    } else if (it.systemBadge) {
+      set.add(it.systemBadge === 'time_context' ? 'time' : it.systemBadge);
+    }
+    const body = String(it.preview || it.content || '');
+    const upperTag = String(it.systemType || '').toUpperCase();
+    if (/The current local time is:/i.test(body)) set.add('time');
+    if (
+      /The user has uploaded\s+\d+\s+image\(s\)/i.test(body)
+      || (/uploaded/i.test(body) && /\.(png|jpe?g|webp|gif|bmp)\b/i.test(body))
+    ) {
+      set.add('image');
+    } else if (/The user has uploaded\s+\d+\s+(?:file|document|attachment|audio|video)/i.test(body)) {
+      set.add('attachment');
+    }
+    if (upperTag === 'COMPACTION' || upperTag === 'CONTEXT_SUMMARY' || upperTag === 'CHECKPOINT') {
+      set.add('compaction');
+    }
+    if (upperTag.includes('SETTINGS')) set.add('settings');
+    return [...set];
+  }
+
+  function formatSystemName(it) {
+    const raw = String(it?.systemType || '').trim();
+    const upper = raw.toUpperCase();
+    if (!raw || upper === 'ADDITIONAL_METADATA' || upper === 'INJECTED') {
+      return 'context injected';
+    }
+    return raw.toLowerCase().replace(/_/g, ' ');
+  }
+
+  function renderSystemBadges(it) {
+    return getSystemBadges(it)
+      .map((b) => `<span class="tr-think-badge badge-${esc(b)}">${esc(t(`inj.${b}`))}</span>`)
+      .join('');
   }
 
   function renderModelBadges(it) {
@@ -1372,13 +1790,13 @@
       badges.push(`<span class="tr-think-badge">${esc(t('td.thinking'))}</span>`);
     }
     if ((it.toolCount || 0) > 0) {
-      badges.push('<span class="tr-think-badge badge-toolcall">toolcall</span>');
+      badges.push(`<span class="tr-think-badge badge-toolcall">${esc(t('td.toolCall'))}</span>`);
     }
     const hasOut = it.hasReply !== undefined
       ? Boolean(it.hasReply)
       : Boolean(!it.hasThinking && it.preview && it.preview !== t('trace.toolOnly'));
     if (hasOut) {
-      badges.push('<span class="tr-think-badge badge-output">output</span>');
+      badges.push(`<span class="tr-think-badge badge-output">${esc(t('td.output'))}</span>`);
     }
     return badges.join('');
   }
@@ -1411,10 +1829,8 @@
         preview = it.preview || '';
         rightMeta = `T${it.turn} · #${it.step}`;
       } else if (it.kind === 'system') {
-        name = it.systemType || t('trace.injected');
-        if (isTimeContextItem(it)) {
-          extraBadge = `<span class="tr-think-badge" style="color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)">${esc(t('trace.timeContext'))}</span>`;
-        }
+        name = formatSystemName(it);
+        extraBadge = renderSystemBadges(it);
         preview = it.preview || '';
         rightMeta = `#${it.step}`;
       } else if (it.kind === 'skill') {
@@ -1466,14 +1882,14 @@
     projPill.classList.toggle('hidden', !isProject || !projName);
     if (isProject && projName) projPill.textContent = projName;
 
-    const badge = $('ov-date-badge');
-    if (state.selectedDate) {
-      $('ov-date-range').textContent = `${state.selectedDate} ✕`;
-      badge.classList.add('active-filter');
-    } else {
-      $('ov-date-range').textContent = `${d.startDate} → ${d.endDate}`;
-      badge.classList.remove('active-filter');
-    }
+    const startInput = $('ov-date-start');
+    const endInput = $('ov-date-end');
+    const picker = $('ov-date-picker');
+    const startVal = state.selectedDate || d.startDate || '';
+    const endVal = state.selectedDate || d.endDate || '';
+    if (startInput && document.activeElement !== startInput) startInput.value = startVal;
+    if (endInput && document.activeElement !== endInput) endInput.value = endVal;
+    if (picker) picker.classList.toggle('custom-active', state.range === 'custom' || !!state.selectedDate);
 
     const kpi = d.kpi || {};
     $('ov-kpi-sessions').textContent = String(kpi.totalSessions || 0);
@@ -1514,47 +1930,34 @@
     `).join('');
 
     // Timing breakdown
-    const tm = d.timing || {};
-    $('ov-output-speed').textContent = t('ov.speed', { v: tm.outputTokPerSec || 0 });
-    const tmSegs = TIMING_META.map((x) => ({ ...x, label: t(`time.${x.key}`), value: tm[x.key] || 0 }));
-    const tmTotal = tmSegs.reduce((a, x) => a + x.value, 0) || 1;
-    $('ov-timing-bar').innerHTML = tmSegs
-      .filter((x) => x.value > 0)
-      .map((x) => `<div class="ctx-seg" style="width:${((x.value / tmTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtDur(x.value)}"></div>`)
-      .join('');
-    $('ov-timing-legend').innerHTML = tmSegs.map((x) => `
-      <div class="comp-item" title="${esc(x.label)}: ${fmtDur(x.value)} (${fmtPct(x.value / tmTotal, 1)})">
-        <div class="comp-left">
-          <span class="comp-dot" style="background:${x.color}"></span>
-          <span class="comp-name">${esc(x.label)}</span>
-        </div>
-        <div class="comp-right">
-          <span class="comp-sub">${fmtDur(x.value)}</span>
-          <span class="comp-pct">${fmtPct(x.value / tmTotal, 1)}</span>
-        </div>
-      </div>
-    `).join('');
+    renderTimingBreakdown($('ov-timing-bar'), $('ov-timing-legend'), $('ov-output-speed'), d.timing);
 
-    // Per-Model Breakdown (Project / Global)
-    renderModelsCard($('ov-models-list'), $('ov-models-bar'), $('ov-models-meta'), d.modelsBreakdown || [], { showSessions: true });
+    // Per-Model Breakdown (Project / Global — with modelsUsed fallback)
+    const ovModels = Array.isArray(d.modelsBreakdown) && d.modelsBreakdown.length
+      ? d.modelsBreakdown
+      : Object.entries(d.modelsUsed || {}).map(([m, mv]) => {
+          const p = (mv.inputTokens || 0) + (mv.cacheReadTokens || 0);
+          const tMs = mv.timedDurationMs ?? mv.durationMs ?? 0;
+          const tOut = mv.timedOutputTokens ?? mv.outputTokens ?? 0;
+          return {
+            model: m,
+            ...mv,
+            totalTokens: p + (mv.outputTokens || 0),
+            cacheHitRate: p > 0 ? (mv.cacheReadTokens || 0) / p : 0,
+            tokPerSec: tMs > 0 ? Math.round((tOut / (tMs / 1000)) * 10) / 10 : 0,
+          };
+        }).sort((a, b) => b.totalTokens - a.totalTokens);
+    renderModelsCard($('ov-models-list'), $('ov-models-bar'), $('ov-models-meta'), ovModels, { showSessions: true });
 
-    renderHeatmap(d.heatmap || {}, {
-      range: d.range,
-      startDate: d.startDate,
-      endDate: d.endDate,
-      heatmapSpan: d.heatmapSpan,
-    });
     renderOverviewSkills(d.skills || []);
+    renderOverviewTools(d.tools || []);
+    renderOverviewCommands(d.commands || []);
 
-    const tools = d.tools || [];
-    $('ov-tools-sub').textContent = t('ov.toolsSub', { u: tools.length, c: tools.reduce((a, x) => a + x.count, 0) });
-    renderBarList($('ov-tools-list'), tools.slice(0, 7), { empty: t('ov.noTools'), showTime: true });
-
-    const cmds = d.commands || [];
-    $('ov-cmds-sub').textContent = t('ov.cmdsSub', { u: cmds.length, c: cmds.reduce((a, x) => a + x.count, 0) });
-    renderBarList($('ov-cmds-list'), cmds.slice(0, 7), { empty: t('ov.noCmds'), showTime: true });
-
-    renderHooksCard($('ov-hooks-card'), $('ov-hooks-meta'), $('ov-hooks-stats'), $('ov-hooks-reasons'), d.hookOverview);
+    renderToolExecCard($('ov-hooks-card'), $('ov-hooks-meta'), $('ov-hooks-bar'), $('ov-hooks-stats'), $('ov-hooks-reasons'), {
+      toolsList: d.tools,
+      totalExecMs: d.kpi?.toolExecMs || d.timing?.toolExecMs || 0,
+      hookData: d.hookOverview,
+    });
 
     renderSessionsList(d.sessions || [], d.workspaces || {});
   }
@@ -1564,7 +1967,10 @@
     if (range === 'today') return t('usage.hour');
     if (range === '7d') return t('usage.7d');
     if (range === '30d') return t('usage.30d');
-    if (granularity === 'hour') return t('usage.hour');
+    if (granularity === 'hour') {
+      const sd = state.overviewData?.startDate || state.customStart;
+      return sd ? t('usage.dateHour', { date: sd }) : t('usage.hour');
+    }
     if (granularity === 'week') return t('usage.week');
     if (granularity === 'month') return t('usage.month');
     if (granularity === 'year') return t('usage.year');
@@ -1767,34 +2173,69 @@
     });
   }
 
+  function sortRankedItems(items, sortBy) {
+    return [...items].sort((a, b) => {
+      if (sortBy === 'time') return (b.durationMs || 0) - (a.durationMs || 0) || (b.count || 0) - (a.count || 0);
+      if (sortBy === 'tokens') return (b.tokens || 0) - (a.tokens || 0) || (b.count || 0) - (a.count || 0);
+      return (b.count || 0) - (a.count || 0) || (b.tokens || 0) - (a.tokens || 0);
+    });
+  }
+
   function renderOverviewSkills(skills) {
     const totalLoads = skills.reduce((a, x) => a + x.count, 0);
     $('ov-skills-sub').textContent = t('ov.skillsSub', { u: skills.length, c: totalLoads });
     const q = state.skillQuery.trim().toLowerCase();
-    let list = skills.filter((s) => !q || s.name.toLowerCase().includes(q));
-    list = [...list].sort((a, b) => (state.skillSort === 'recent' ? b.lastAt - a.lastAt : b.count - a.count));
-    renderBarList($('ov-skills-list'), list.slice(0, 7), { empty: q ? t('ov.noMatchSkills') : t('ov.noSkills'), showTime: true });
+    const filtered = skills.filter((s) => !q || s.name.toLowerCase().includes(q));
+    const list = sortRankedItems(filtered, state.skillSort);
+    renderBarList($('ov-skills-list'), list.slice(0, 7), {
+      empty: q ? t('ov.noMatchSkills') : t('ov.noSkills'),
+      sortBy: state.skillSort,
+    });
   }
 
-  function renderBarList(el, rows, { empty = '', showTime = true } = {}) {
+  function renderOverviewTools(tools) {
+    $('ov-tools-sub').textContent = t('ov.toolsSub', { u: tools.length, c: tools.reduce((a, x) => a + x.count, 0) });
+    const list = sortRankedItems(tools, state.toolSort);
+    renderBarList($('ov-tools-list'), list.slice(0, 7), { empty: t('ov.noTools'), sortBy: state.toolSort });
+  }
+
+  function renderOverviewCommands(cmds) {
+    $('ov-cmds-sub').textContent = t('ov.cmdsSub', { u: cmds.length, c: cmds.reduce((a, x) => a + x.count, 0) });
+    const list = sortRankedItems(cmds, state.cmdSort);
+    renderBarList($('ov-cmds-list'), list.slice(0, 7), { empty: t('ov.noCmds'), sortBy: state.cmdSort });
+  }
+
+  function renderBarList(el, rows, { empty = '', sortBy = 'count' } = {}) {
     if (!rows.length) {
       el.innerHTML = `<div class="empty-inline">${esc(empty)}</div>`;
       return;
     }
-    const maxCount = Math.max(...rows.map((r) => r.count), 1);
+    const valOf = (r) => (sortBy === 'time' ? (r.durationMs || 0) : sortBy === 'tokens' ? (r.tokens || 0) : (r.count || 0));
+    const maxVal = Math.max(...rows.map(valOf), 1);
     el.innerHTML = rows.map((r, i) => {
       const color = BAR_PALETTE[i % BAR_PALETTE.length];
-      const pct = Math.max(4, (r.count / maxCount) * 100);
+      const v = valOf(r);
+      const pct = v > 0 ? Math.max(4, (v / maxVal) * 100) : 2;
+      let primary = `×${r.count || 0}`;
+      let secondary = r.tokens ? fmtTokens(r.tokens) : '';
+      if (sortBy === 'time') {
+        primary = r.durationMs ? fmtDur(r.durationMs) : '0s';
+        secondary = `×${r.count || 0}`;
+      } else if (sortBy === 'tokens') {
+        primary = fmtTokens(r.tokens || 0);
+        secondary = `×${r.count || 0}`;
+      }
+      const tip = `${r.name}: ×${r.count || 0} · ${fmtDur(r.durationMs || 0)} · ${fmtTokens(r.tokens || 0)}`;
       return `
-        <div class="bar-row">
+        <div class="bar-row" title="${esc(tip)}">
           <div class="bar-row-top">
             <div class="bar-label-wrap">
               <span class="bar-dot" style="background:${color}"></span>
               <span class="bar-label">${esc(r.name)}</span>
             </div>
             <div class="bar-right">
-              <span class="bar-val">×${r.count}</span>
-              ${showTime ? `<span class="bar-time">${esc(fmtRelative(r.lastAt))}</span>` : ''}
+              <span class="bar-val">${esc(primary)}</span>
+              ${secondary ? `<span class="bar-time">${esc(secondary)}</span>` : ''}
             </div>
           </div>
           <div class="bar-track"><div class="bar-fill" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
@@ -1967,7 +2408,7 @@
   ];
 
   function traceEventMatchesTags(it) {
-    if (it.hasError) return state.traceEnabled.has('error') || state.traceEnabled.has(it.kind);
+    if (it.hasError) return state.traceEnabled.has('error');
     return state.traceEnabled.has(it.kind);
   }
 
@@ -2147,7 +2588,12 @@
     const shouldStick = state.traceFirstScroll || (state.traceFollow && state.traceStick);
 
     if ($('trace-total-count')) $('trace-total-count').textContent = String(allItems.length);
-    renderTraceTags(data?.counts || {});
+    const exclusiveCounts = { input: 0, system: 0, skill: 0, model: 0, tool: 0, error: 0 };
+    for (const it of allItems) {
+      const bucket = it.hasError ? 'error' : it.kind;
+      if (bucket in exclusiveCounts) exclusiveCounts[bucket]++;
+    }
+    renderTraceTags(exclusiveCounts);
 
     if (!allItems.length) {
       stripEl.classList.add('hidden');
@@ -2166,7 +2612,8 @@
         || String(it.skillName || '').toLowerCase().includes(q)
         || String(it.model || '').toLowerCase().includes(q)
         || String(it.systemType || '').toLowerCase().includes(q)
-        || (isTimeContextItem(it) && (t('trace.timeContext').toLowerCase().includes(q) || 'time context'.includes(q) || '时间上下文'.includes(q)))
+        || (it.kind === 'system' && formatSystemName(it).includes(q))
+        || (it.kind === 'system' && getSystemBadges(it).some((b) => b.includes(q) || t(`inj.${b}`).toLowerCase().includes(q)))
         || String(it.preview || '').toLowerCase().includes(q)
         || String(it.argsPreview || '').toLowerCase().includes(q)
         || String(it.resultPreview || '').toLowerCase().includes(q);
@@ -2223,7 +2670,7 @@
 
     // Cap rendered DOM rows to latest 400 matching items for snappy scrolling on huge sessions
     const visible = filtered.length > 400 ? filtered.slice(-400) : filtered;
-    listEl.innerHTML = visible.map((it) => {
+    const rowsHtml = visible.map((it) => {
       const sel = state.traceSelectedIdx === it.idx ? ' selected' : '';
       const dotCls = it.hasError ? 'error' : it.kind;
       let name = '';
@@ -2236,10 +2683,8 @@
         preview = it.preview || (it.mediaCount ? `[${it.mediaCount} media]` : '');
         rightMeta = `T${it.turn} · #${it.step}`;
       } else if (it.kind === 'system') {
-        name = it.systemType || t('trace.injected');
-        if (isTimeContextItem(it)) {
-          extraBadge = `<span class="tr-think-badge" style="color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)">${esc(t('trace.timeContext'))}</span>`;
-        }
+        name = formatSystemName(it);
+        extraBadge = renderSystemBadges(it);
         preview = it.preview || '';
         rightMeta = `#${it.step}`;
       } else if (it.kind === 'skill') {
@@ -2273,9 +2718,33 @@
       `;
     }).join('');
 
-    listEl.querySelectorAll('.tr-row').forEach((btn) => {
+    let liveGenHtml = '';
+    if (isLiveGenerating() && state.traceEnabled.has('model') && !q) {
+      let modelLabel = state.liveState?.model || '';
+      if (!modelLabel || modelLabel.toLowerCase() === 'auto') {
+        const lastModelItem = [...allItems].reverse().find((x) => x.kind === 'model' && x.model);
+        modelLabel = lastModelItem?.model || state.sessionData?.model || t('trace.model');
+      }
+      const elapsedMs = Math.max(100, Date.now() - (state.liveState.sinceMs || Date.now()));
+      const elapsedText = elapsedMs >= 60_000 ? fmtDur(elapsedMs) : `${(elapsedMs / 1000).toFixed(1)}s`;
+      liveGenHtml = `
+        <div class="tr-row generating">
+          <div class="tr-left">
+            <span class="tr-dot model"></span>
+            <span class="tr-name">${esc(modelLabel)}</span>
+            <span class="tr-think-badge badge-generating">${esc(t('live.generating'))}</span>
+          </div>
+          <div class="tr-right"><span id="trace-gen-elapsed">${esc(elapsedText)}</span></div>
+        </div>
+      `;
+    }
+
+    listEl.innerHTML = rowsHtml + liveGenHtml;
+
+    listEl.querySelectorAll('.tr-row[data-tidx]').forEach((btn) => {
       btn.addEventListener('click', () => toggleTraceDetail(Number(btn.dataset.tidx)));
     });
+    updateGeneratingTicker();
 
     const stripScroll = $('trace-strip-scroll');
     if (shouldStick) {
@@ -2361,7 +2830,7 @@
       : item.kind === 'skill'
         ? (item.skillName || t('trace.skill'))
         : item.kind === 'system'
-          ? (isTimeContextItem(item) ? t('trace.timeContext') : (item.systemType || t('trace.injected')))
+          ? formatSystemName(item)
           : t(`trace.${item.kind}`);
     $('td-step-label').textContent = `${t('step.turn', { turn: item.turn })} · ${t('step.label', { step: item.step })}`;
 
@@ -2559,16 +3028,17 @@
       }
     } else if (item.kind === 'system') {
       const sysText = item.content || t('td.noContent');
-      const isTimeCtx = isTimeContextItem(item);
+      const sysBadges = getSystemBadges(item);
+      const badgeLabels = sysBadges.map((b) => t(`inj.${b}`)).join(' · ');
       if (tab === 'raw') {
         bodyEl.innerHTML = `
-          <div><div class="td-section-head"><span>${esc(item.systemType || t('trace.injected'))}</span>${copyBtnHtml('td-pre-sys')}</div>
+          <div><div class="td-section-head"><span>${esc(formatSystemName(item))}</span>${copyBtnHtml('td-pre-sys')}</div>
           <pre id="td-pre-sys" class="td-pre">${esc(sysText)}</pre></div>
         `;
       } else {
         bodyEl.innerHTML = `
           ${kv([
-            [t('td.status'), isTimeCtx ? `${t('trace.timeContext')} (${item.systemType})` : (item.systemType || 'INJECTED')],
+            [t('td.status'), badgeLabels ? `${badgeLabels} (${formatSystemName(item)})` : formatSystemName(item)],
             [t('td.source'), item.source || 'SYSTEM'],
             [t('td.turnStep'), `${t('step.turn', { turn: item.turn })} · #${item.step}`],
             [t('td.start'), fmtIsoLocal(item.at)],
@@ -2656,7 +3126,11 @@
   // ---------- Tab, Project Resolution, Language & Settings Actions ----------
   function selectTab(tab) {
     const prev = state.tab;
-    state.tab = normalizeTabParam(tab) || 'session';
+    const next = normalizeTabParam(tab) || (IS_TRACE_PANE ? 'trace' : 'session');
+    if (next === 'settings' && prev !== 'settings') {
+      state.tabBeforeSettings = prev;
+    }
+    state.tab = next;
     if (prev !== state.tab && (state.tab === 'project' || state.tab === 'global')) {
       state.overviewEtag = '';
       state.sessionWorkspace = '';
@@ -2666,11 +3140,21 @@
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-selected', String(active));
     });
+    $('btn-settings')?.classList.toggle('active', state.tab === 'settings');
+    $('btn-settings')?.setAttribute('aria-pressed', String(state.tab === 'settings'));
+    if (IS_TRACE_PANE) {
+      $('btn-trace-follow')?.classList.toggle('hidden', state.tab !== 'trace');
+    }
     $('view-session').classList.toggle('active', state.tab === 'session');
     $('view-trace').classList.toggle('active', state.tab === 'trace');
     $('view-overview').classList.toggle('active', state.tab === 'project' || state.tab === 'global');
-    updateLivePill();
-    pollNow();
+    $('view-settings').classList.toggle('active', state.tab === 'settings');
+    updateGeneratingTicker();
+    if (state.tab === 'settings') {
+      populateSettingsView();
+    } else {
+      pollNow();
+    }
   }
 
   async function resolveCurrentProject() {
@@ -2733,22 +3217,274 @@
   function setLanguage(lang) {
     settings.lang = lang === 'zh' ? 'zh' : 'en';
     saveSettings(settings);
+    if ($('set-lang')) $('set-lang').value = settings.lang;
     applyStaticI18n();
+    renderUpdatePill();
     renderSession();
     renderTrace();
     renderOverview();
+    renderLayoutEditor();
   }
 
-  async function openSettings() {
+  function fmtBytesShort(bytes) {
+    const b = Math.max(0, Number(bytes) || 0);
+    if (b >= 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+    if (b >= 1024) return `${Math.round(b / 1024)} KB`;
+    return `${b} B`;
+  }
+
+  function fmtSpeed(bps) {
+    const v = Math.max(0, Number(bps) || 0);
+    if (v >= 1024 * 1024) return `${(v / (1024 * 1024)).toFixed(1)} MB/s`;
+    if (v >= 1024) return `${Math.round(v / 1024)} KB/s`;
+    return `${v} B/s`;
+  }
+
+  function renderUpdatePill() {
+    const btn = $('btn-update-pill');
+    const txt = $('btn-update-text');
+    if (!btn || !txt) return;
+
+    const job = state.updateJob;
+    const info = state.updateInfo;
+    const activeJob = job && job.status && job.status !== 'idle';
+
+    if (!activeJob && !(info && info.hasUpdate)) {
+      btn.classList.add('hidden');
+      return;
+    }
+
+    btn.classList.remove('hidden', 'error');
+
+    if (!activeJob) {
+      btn.disabled = false;
+      txt.textContent = t('update.btn');
+      btn.title = `v${info.currentVersion} → v${info.latestVersion}`;
+      return;
+    }
+
+    if (job.status === 'checking') {
+      btn.disabled = true;
+      txt.textContent = t('update.downloading');
+      btn.title = '';
+    } else if (job.status === 'downloading') {
+      btn.disabled = true;
+      const speed = job.speedBps > 0 ? ` · ${fmtSpeed(job.speedBps)}` : '';
+      const progress = job.bytesTotal > 0
+        ? `${job.pct}%`
+        : (job.bytesLoaded > 0 ? fmtBytesShort(job.bytesLoaded) : '0%');
+      txt.textContent = `${t('update.downloading')} ${progress}${speed}`;
+      btn.title = job.version ? `v${job.version}` : '';
+    } else if (job.status === 'installing') {
+      btn.disabled = true;
+      txt.textContent = t('update.installing');
+    } else if (job.status === 'reloading') {
+      btn.disabled = true;
+      txt.textContent = t('update.reloading');
+    } else if (job.status === 'error') {
+      btn.disabled = false;
+      btn.classList.add('error');
+      txt.textContent = t('update.failed');
+      btn.title = job.error || t('update.error');
+    }
+  }
+
+  function waitForSidecarReload() {
+    if (state.updatePollTimer) {
+      clearInterval(state.updatePollTimer);
+      state.updatePollTimer = null;
+    }
+    const startedAt = Date.now();
+    const attempt = async () => {
+      try {
+        const h = await apiGet('/api/health');
+        if (h && h.ok && Date.now() - startedAt >= 1000) {
+          location.reload();
+          return;
+        }
+      } catch {
+        // Sidecar is restarting; keep waiting.
+      }
+      if (Date.now() - startedAt < 25_000) {
+        setTimeout(attempt, 450);
+      } else {
+        location.reload();
+      }
+    };
+    setTimeout(attempt, 900);
+  }
+
+  async function pollUpdateStatus() {
+    try {
+      const job = await apiGet('/api/update/status');
+      state.updateJob = job;
+      renderUpdatePill();
+      if (job.status === 'reloading') {
+        waitForSidecarReload();
+      } else if (job.status === 'error' || job.status === 'idle') {
+        if (state.updatePollTimer) {
+          clearInterval(state.updatePollTimer);
+          state.updatePollTimer = null;
+        }
+      }
+    } catch {
+      // Sidecar may already have exited to restart — transition to reload watcher.
+      if (state.updateJob && (state.updateJob.status === 'installing' || state.updateJob.status === 'reloading')) {
+        state.updateJob = { ...state.updateJob, status: 'reloading' };
+        renderUpdatePill();
+        waitForSidecarReload();
+      }
+    }
+  }
+
+  async function startPluginUpdate() {
+    closeSettings();
+    state.updateJob = { status: 'checking', pct: 0, bytesLoaded: 0, bytesTotal: 0, speedBps: 0 };
+    renderUpdatePill();
+    try {
+      const job = await apiPost('/api/update/start');
+      state.updateJob = job;
+      renderUpdatePill();
+      if (state.updatePollTimer) clearInterval(state.updatePollTimer);
+      state.updatePollTimer = setInterval(pollUpdateStatus, 200);
+    } catch (err) {
+      state.updateJob = { status: 'error', error: String(err?.message || err) };
+      renderUpdatePill();
+    }
+  }
+
+  async function checkUpdateOnOpen() {
+    try {
+      const res = await apiGet('/api/version?check=1');
+      if (res && res.hasUpdate) {
+        state.updateInfo = res;
+        renderUpdatePill();
+      }
+    } catch {
+      // Silent background check; never disrupt UI.
+    }
+  }
+
+  function getActiveLayoutConfig() {
+    return state.layoutEditorScope === 'overview' ? settings.overviewLayout : settings.sessionLayout;
+  }
+
+  function renderLayoutEditor() {
+    const listEl = $('settings-layout-list');
+    if (!listEl) return;
+    const isOv = state.layoutEditorScope === 'overview';
+    const cfg = getActiveLayoutConfig();
+    const hiddenSet = new Set(cfg.hidden || []);
+    const prefix = isOv ? 'layout.ov.' : 'layout.s.';
+
+    document.querySelectorAll('.layout-tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.layoutScope === state.layoutEditorScope);
+    });
+
+    listEl.innerHTML = cfg.order.map((id, idx) => {
+      const visible = !hiddenSet.has(id);
+      return `
+        <div class="layout-item${visible ? '' : ' is-hidden'}" data-layout-id="${esc(id)}" draggable="true">
+          <div class="layout-item-left">
+            <span class="layout-drag-handle" aria-hidden="true">⋮⋮</span>
+            <span class="layout-item-name">${esc(t(`${prefix}${id}`))}</span>
+          </div>
+          <div class="layout-item-controls">
+            <button type="button" class="layout-move-btn" data-move="up" ${idx === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+            <button type="button" class="layout-move-btn" data-move="down" ${idx === cfg.order.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+            <label class="layout-switch">
+              <input type="checkbox" data-layout-toggle="${esc(id)}" ${visible ? 'checked' : ''}>
+              <span class="layout-switch-track"></span>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const commitLayout = () => {
+      saveSettings(settings);
+      applyContextLayout(true);
+      renderLayoutEditor();
+    };
+
+    const moveItem = (fromIdx, toIdx) => {
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx || toIdx >= cfg.order.length) return;
+      const [item] = cfg.order.splice(fromIdx, 1);
+      cfg.order.splice(toIdx, 0, item);
+      commitLayout();
+    };
+
+    listEl.querySelectorAll('.layout-move-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.layout-item');
+        const idx = cfg.order.indexOf(row?.dataset.layoutId);
+        moveItem(idx, btn.dataset.move === 'up' ? idx - 1 : idx + 1);
+      });
+    });
+
+    listEl.querySelectorAll('[data-layout-toggle]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const id = inp.dataset.layoutToggle;
+        const set = new Set(cfg.hidden || []);
+        if (inp.checked) set.delete(id);
+        else set.add(id);
+        cfg.hidden = [...set];
+        commitLayout();
+      });
+    });
+
+    let dragId = '';
+    listEl.querySelectorAll('.layout-item').forEach((row) => {
+      row.addEventListener('dragstart', (e) => {
+        dragId = row.dataset.layoutId || '';
+        row.classList.add('dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', dragId);
+        }
+      });
+      row.addEventListener('dragend', () => {
+        dragId = '';
+        listEl.querySelectorAll('.layout-item').forEach((r) => r.classList.remove('dragging', 'drag-over'));
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!dragId || row.dataset.layoutId === dragId) return;
+        listEl.querySelectorAll('.layout-item.drag-over').forEach((r) => r.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over');
+      });
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const srcId = dragId || e.dataTransfer?.getData('text/plain') || '';
+        const dstId = row.dataset.layoutId || '';
+        row.classList.remove('drag-over');
+        if (!srcId || !dstId || srcId === dstId) return;
+        moveItem(cfg.order.indexOf(srcId), cfg.order.indexOf(dstId));
+      });
+    });
+  }
+
+  async function populateSettingsView() {
     $('set-lang').value = settings.lang;
     $('set-poll').value = String(settings.pollMs);
     $('set-default-tab').value = settings.defaultTab;
-    $('set-update-status').classList.add('hidden');
-    $('settings-modal').classList.remove('hidden');
+    renderLayoutEditor();
     try {
       const ver = await apiGet('/api/version');
       $('set-version-label').textContent = `agy-context v${ver.currentVersion}`;
     } catch { /* ignore */ }
+  }
+
+  function openSettings() {
+    if (state.tab === 'settings') {
+      closeSettings();
+      return;
+    }
+    $('set-update-status').classList.add('hidden');
+    selectTab('settings');
   }
 
   async function checkUpdates() {
@@ -2756,15 +3492,25 @@
     statusEl.classList.remove('hidden');
     statusEl.textContent = t('update.checking');
     try {
-      const res = await apiGet('/api/version?check=1');
+      const res = await apiGet('/api/version?check=1&force=1');
       $('set-version-label').textContent = `agy-context v${res.currentVersion}`;
       if (res.error === 'no_repository') {
         statusEl.textContent = t('update.noRepo');
       } else if (res.error) {
         statusEl.textContent = t('update.error');
       } else if (res.hasUpdate) {
-        statusEl.innerHTML = `${esc(t('update.available', { latest: res.latestVersion }))}<br><code>agy plugin install ${esc(res.repository)}</code>`;
+        state.updateInfo = res;
+        renderUpdatePill();
+        statusEl.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span>${esc(t('update.available', { latest: res.latestVersion }))}</span>
+            <button type="button" class="primary-btn xs" data-run-update>${esc(t('update.now'))}</button>
+          </div>
+        `;
+        statusEl.querySelector('[data-run-update]')?.addEventListener('click', startPluginUpdate);
       } else {
+        state.updateInfo = res;
+        renderUpdatePill();
         statusEl.textContent = t('update.upToDate', { ver: res.currentVersion });
       }
     } catch {
@@ -2772,24 +3518,28 @@
     }
   }
 
-  function closeSettings() { $('settings-modal').classList.add('hidden'); }
+  function closeSettings() {
+    if (state.tab !== 'settings') return;
+    selectTab(state.tabBeforeSettings || (IS_TRACE_PANE ? 'trace' : 'session'));
+  }
 
   function applySettings() {
     settings.lang = $('set-lang').value === 'zh' ? 'zh' : 'en';
     settings.pollMs = Math.max(1000, Number($('set-poll').value) || 1500);
     settings.defaultTab = $('set-default-tab').value;
     saveSettings(settings);
-    closeSettings();
     applyStaticI18n();
+    renderUpdatePill();
     renderSession();
     renderTrace();
     renderOverview();
+    renderLayoutEditor();
     schedulePoll();
   }
 
   // ---------- Live Polling Loop ----------
   async function pollOnce() {
-    if (state.inFlight) return;
+    if (state.inFlight || state.tab === 'settings') return;
     state.inFlight = true;
     try {
       const currentHost = hostConvId();
@@ -2859,7 +3609,13 @@
         }
       } else {
         const qs = new URLSearchParams({ range: state.range });
-        if (state.selectedDate) qs.set('date', state.selectedDate);
+        if (state.selectedDate) {
+          qs.set('date', state.selectedDate);
+        } else if (state.range === 'custom' || state.customStart || state.customEnd) {
+          qs.set('range', 'custom');
+          if (state.customStart) qs.set('start', state.customStart);
+          if (state.customEnd) qs.set('end', state.customEnd);
+        }
         if (state.tab === 'project') {
           const proj = await resolveCurrentProject();
           if (proj.workspace) qs.set('workspace', proj.workspace);
@@ -2874,12 +3630,9 @@
         }
       }
 
-      $('live-pill').classList.remove('stale');
-      updateLivePill();
+      // Polling succeeded
     } catch {
-      $('live-pill').classList.add('stale');
-      $('live-pill').classList.remove('busy', 'phase-tools');
-      $('live-label').textContent = t('live.stale');
+      // Transient polling error; next interval will retry
     } finally {
       state.inFlight = false;
     }
@@ -2904,10 +3657,31 @@
     setLanguage(settings.lang === 'en' ? 'zh' : 'en');
   });
 
+  $('btn-update-pill').addEventListener('click', startPluginUpdate);
   $('btn-settings').addEventListener('click', openSettings);
+  $('btn-settings-back').addEventListener('click', closeSettings);
   $('btn-check-update').addEventListener('click', checkUpdates);
-  $('btn-save-settings').addEventListener('click', applySettings);
-  document.querySelectorAll('[data-close-modal]').forEach((el) => el.addEventListener('click', closeSettings));
+  ['set-lang', 'set-poll', 'set-default-tab'].forEach((id) => {
+    $(id)?.addEventListener('change', applySettings);
+  });
+
+  document.querySelectorAll('.layout-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.layoutEditorScope = btn.dataset.layoutScope === 'overview' ? 'overview' : 'session';
+      renderLayoutEditor();
+    });
+  });
+
+  $('btn-reset-layout')?.addEventListener('click', () => {
+    if (state.layoutEditorScope === 'overview') {
+      settings.overviewLayout = { order: [...DEFAULT_OVERVIEW_ORDER], hidden: [] };
+    } else {
+      settings.sessionLayout = { order: [...DEFAULT_SESSION_ORDER], hidden: [] };
+    }
+    saveSettings(settings);
+    applyContextLayout(true);
+    renderLayoutEditor();
+  });
 
   $('btn-goto-overview').addEventListener('click', () => selectTab('global'));
   $('btn-back-current').addEventListener('click', () => {
@@ -2953,72 +3727,73 @@
   // Expand/collapse all breakdown groups
   $('btn-toggle-all').addEventListener('click', () => {
     if (!state.sessionData) return;
-    const limit = resolveSessionContextLimit(state.sessionData).limit;
-    const { rows, freeTokens } = buildSessionRows(state.sessionData, limit);
-    const ids = rows.map((r) => r.id);
+    const base = buildSessionRows(state.sessionData, DEFAULT_SESSION_CTX_LIMIT);
+    const limit = resolveSessionContextLimit(state.sessionData, base.usedSum).limit;
+    const freeTokens = Math.max(0, limit - base.usedSum);
+    const rows = base.rows;
+    const ids = rows.filter(isBreakdownRowExpandable).map((r) => r.id);
     const allOpen = ids.every((id) => state.expandedKeys.has(id));
     if (allOpen) state.expandedKeys.clear();
     else ids.forEach((id) => state.expandedKeys.add(id));
     renderBreakdownList(rows, freeTokens, limit);
   });
 
-  // Trend mode & span
-  document.querySelectorAll('[data-trend-mode]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.trendMode = btn.dataset.trendMode;
-      document.querySelectorAll('[data-trend-mode]').forEach((b) => b.classList.toggle('active', b === btn));
-      if (state.sessionData) renderTrendChart(state.sessionData.timeline || []);
-    });
-  });
-
-  document.querySelectorAll('[data-trend-span]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.trendSpan = btn.dataset.trendSpan;
-      document.querySelectorAll('[data-trend-span]').forEach((b) => b.classList.toggle('active', b === btn));
-      if (state.sessionData) renderTrendChart(state.sessionData.timeline || []);
-    });
-  });
-
-  // Overview controls
+  // Overview controls (quick presets fill & sync the custom date range picker)
   document.querySelectorAll('.range-pill').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.range = btn.dataset.range;
       state.selectedDate = '';
+      state.customStart = '';
+      state.customEnd = '';
       state.overviewEtag = '';
       document.querySelectorAll('.range-pill').forEach((b) => b.classList.toggle('active', b === btn));
       pollNow();
     });
   });
 
-  $('ov-date-badge').addEventListener('click', () => {
-    if (state.selectedDate) {
-      state.selectedDate = '';
-      state.overviewEtag = '';
-      pollNow();
+  const onCustomDateChange = () => {
+    let sVal = $('ov-date-start')?.value || '';
+    let eVal = $('ov-date-end')?.value || '';
+    if (!sVal && !eVal) return;
+    if (sVal && eVal && sVal > eVal) {
+      const tmp = sVal;
+      sVal = eVal;
+      eVal = tmp;
+      if ($('ov-date-start')) $('ov-date-start').value = sVal;
+      if ($('ov-date-end')) $('ov-date-end').value = eVal;
     }
-  });
-
-  document.querySelectorAll('[data-hm]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.hmMode = btn.dataset.hm;
-      document.querySelectorAll('[data-hm]').forEach((b) => b.classList.toggle('active', b === btn));
-      if (state.overviewData) {
-        const d = state.overviewData;
-        renderHeatmap(d.heatmap || {}, {
-          range: d.range,
-          startDate: d.startDate,
-          endDate: d.endDate,
-          heatmapSpan: d.heatmapSpan,
-        });
-      }
-    });
-  });
+    state.range = 'custom';
+    state.selectedDate = '';
+    state.customStart = sVal;
+    state.customEnd = eVal;
+    state.overviewEtag = '';
+    document.querySelectorAll('.range-pill').forEach((b) => b.classList.remove('active'));
+    pollNow();
+  };
+  $('ov-date-start')?.addEventListener('change', onCustomDateChange);
+  $('ov-date-end')?.addEventListener('change', onCustomDateChange);
 
   document.querySelectorAll('[data-skill-sort]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.skillSort = btn.dataset.skillSort;
       document.querySelectorAll('[data-skill-sort]').forEach((b) => b.classList.toggle('active', b === btn));
       if (state.overviewData) renderOverviewSkills(state.overviewData.skills || []);
+    });
+  });
+
+  document.querySelectorAll('[data-tool-sort]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.toolSort = btn.dataset.toolSort;
+      document.querySelectorAll('[data-tool-sort]').forEach((b) => b.classList.toggle('active', b === btn));
+      if (state.overviewData) renderOverviewTools(state.overviewData.tools || []);
+    });
+  });
+
+  document.querySelectorAll('[data-cmd-sort]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.cmdSort = btn.dataset.cmdSort;
+      document.querySelectorAll('[data-cmd-sort]').forEach((b) => b.classList.toggle('active', b === btn));
+      if (state.overviewData) renderOverviewCommands(state.overviewData.commands || []);
     });
   });
 
@@ -3041,7 +3816,7 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('settings-modal').classList.contains('hidden')) closeSettings();
+    if (e.key === 'Escape' && state.tab === 'settings') closeSettings();
   });
 
   // Boot: configure standalone Trace pane vs Context pane
@@ -3052,5 +3827,7 @@
     $('btn-trace-follow').classList.remove('hidden');
   }
   applyStaticI18n();
+  applyContextLayout(true);
   selectTab(state.tab);
+  checkUpdateOnOpen();
 })();

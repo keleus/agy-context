@@ -143,8 +143,22 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(parsed.modelComposition.length, 1);
   assert.equal(parsed.modelComposition[0].model, 'gemini-4-neon-high');
   assert.equal(parsed.modelComposition[0].total, parsed.composition.thinking + parsed.composition.assistant_reply);
-  assert.ok(parsed.categoryItems.system_prompt.length >= 1);
-  assert.ok(parsed.categoryItems.skill_injection.length >= 1);
+  assert.ok(Array.isArray(parsed.modelComposition[0].typeBreakdown));
+  const tbSum = parsed.modelComposition[0].typeBreakdown.reduce((a, x) => a + x.tokens, 0);
+  assert.equal(tbSum, parsed.modelComposition[0].totalTokens);
+  assert.ok(parsed.modelComposition[0].typeBreakdown.some((x) => x.type === 'cache_read'));
+  assert.ok(parsed.modelComposition[0].typeBreakdown.some((x) => x.type === 'text_input'));
+  assert.ok(parsed.modelComposition[0].typeBreakdown.some((x) => x.type === 'thinking'));
+  assert.ok(parsed.modelComposition[0].typeBreakdown.some((x) => x.type === 'tool_call'));
+  assert.equal(parsed.categoryItems.system_prompt.length, 0);
+  assert.equal(parsed.categoryItems.tool_definitions.length, 0);
+  assert.equal(parsed.categoryItems.skill_injection.length, 1);
+  assert.equal(parsed.categoryItems.skill_injection[0].label, 'plugin');
+  assert.equal(parsed.categoryItems.skill_injection[0].tool, 'skill');
+  assert.equal(parsed.categoryItems.skill_injection[0].count, 1);
+  assert.equal(parsed.categoryItems.tool_calls.length, 1);
+  assert.equal(parsed.categoryItems.tool_calls[0].label, 'run_command');
+  assert.equal(parsed.categoryItems.tool_calls[0].count, 1);
   assert.equal(parsed.commandLog.length, 1);
   assert.equal(parsed.commandLog[0].failed, false);
   assert.ok(parsed.timeline[0].buckets);
@@ -227,7 +241,7 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
       type: 'USER_INPUT',
       status: 'DONE',
       created_at: '2026-11-20T14:00:00Z',
-      content: '<USER_REQUEST>\nhello\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-20T22:00:00+08:00.\n</ADDITIONAL_METADATA>',
+      content: '<USER_REQUEST>\nhello\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-20T22:00:00+08:00.\n\nThe user has uploaded 2 image(s):\n- /tmp/a.png\n</ADDITIONAL_METADATA>',
     },
     {
       step_index: 1,
@@ -274,7 +288,8 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   const tr = parseTrace(raw);
   const metaItem = tr.items.find((x) => x.kind === 'system' && x.systemType === 'ADDITIONAL_METADATA');
   assert.ok(metaItem);
-  assert.equal(metaItem.systemBadge, 'time_context');
+  assert.equal(metaItem.systemBadge, 'time');
+  assert.deepEqual(metaItem.systemBadges, ['time', 'image']);
 
   const modelItems = tr.items.filter((x) => x.kind === 'model');
   assert.equal(modelItems.length, 2);
@@ -291,6 +306,12 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   const parsed = parseTranscript(raw, { conversationId: 'test-final-timing' });
   assert.equal(parsed.timing.outputTokPerSec, 100);
   assert.equal(parsed.modelsBreakdown[0].tokPerSec, 100);
+  // System prompt & tool definitions have no fabricated details
+  assert.deepEqual(parsed.categoryItems.system_prompt, []);
+  assert.deepEqual(parsed.categoryItems.tool_definitions, []);
+  // Combined ADDITIONAL_METADATA (time + image) splits & merges into separate injected_content groups
+  const injGroups = parsed.categoryItems.injected_content.map((x) => x.group).sort();
+  assert.deepEqual(injGroups, ['image', 'time']);
 
   // When lifecycle hook timings are present, final reply gets exact ms duration & throughput,
   // and PostToolUse enriches tool timing & host error.
@@ -326,6 +347,13 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(parsedWithHook.hookTelemetry.turnStats.reasons.NO_TOOL_CALL, 1);
   assert.equal(parsedWithHook.hookTelemetry.toolStats.calls, 1);
   assert.equal(parsedWithHook.hookTelemetry.toolStats.errors, 1);
+  // Hook-flagged failed tool call is separated into a failed row in tool_calls
+  assert.equal(parsedWithHook.categoryItems.tool_calls.length, 1);
+  assert.equal(parsedWithHook.categoryItems.tool_calls[0].failed, true);
+  assert.equal(parsedWithHook.categoryItems.tool_calls[0].status, 'ERROR');
+  // Without hook error, the same read_file call is a succeeded row
+  assert.equal(parsed.categoryItems.tool_calls[0].failed, false);
+  assert.equal(parsed.categoryItems.tool_calls[0].status, 'DONE');
 
   // Live in-flight state detection (generating & tools)
   const now = Date.parse('2026-11-20T14:00:15.000Z');

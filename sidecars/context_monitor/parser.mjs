@@ -100,6 +100,48 @@ export function splitUserInput(raw) {
   return { userText: text.trim(), injectedText: '' };
 }
 
+function splitInjectedSubparts(injectedText) {
+  const raw = String(injectedText || '').trim();
+  if (!raw) return [];
+  const parts = [];
+
+  const timeLines = [];
+  const withoutTime = raw.replace(/^\s*The current local time is:[^\n]*$/gim, (m) => {
+    timeLines.push(m.trim());
+    return '';
+  });
+  if (timeLines.length) {
+    parts.push({ group: 'time', label: 'Time', text: timeLines.join('\n') });
+  }
+
+  const imageBlocks = [];
+  const withoutImages = withoutTime.replace(
+    /The user has uploaded\s+\d+\s+image\(s\):(?:\n\s*-\s*[^\n]+)*/gi,
+    (m) => {
+      imageBlocks.push(m.trim());
+      return '';
+    },
+  );
+  if (imageBlocks.length) {
+    parts.push({ group: 'image', label: 'Image', text: imageBlocks.join('\n') });
+  }
+
+  const remainder = withoutImages
+    .replace(/<([A-Z][A-Z0-9_]+)>\s*<\/\1>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (remainder) {
+    const group = /<CONTEXT_SUMMARY>/i.test(remainder) ? 'compaction'
+      : /<USER_SETTINGS/i.test(remainder) ? 'settings'
+      : 'other';
+    const label = group === 'compaction' ? 'Compaction'
+      : group === 'settings' ? 'Settings'
+      : 'Other injected';
+    parts.push({ group, label, text: remainder });
+  }
+  return parts;
+}
+
 export function unwrapArg(val) {
   if (typeof val !== 'string') return val == null ? '' : String(val);
   const trimmed = val.trim();
@@ -271,7 +313,7 @@ function describeToolItem(tc) {
   if (name === 'read_file' || name === 'view_file') {
     const path = unwrapArg(args.Path || args.AbsolutePath || '');
     const skill = extractSkillName(path);
-    if (skill) return { label: skill, detail: path, category: 'skill_injection', tool: name, path };
+    if (skill) return { label: skill, detail: path, category: 'skill_injection', tool: 'skill', path };
     return { label: shortenPath(path) || 'file', detail: path, category: 'tool_calls', tool: name, path };
   }
   if (name === 'run_command') {
@@ -301,6 +343,20 @@ function commandFailedFromOutput(step) {
   const m = content.match(/Command exited with code (\d+)/);
   if (m && Number(m[1]) !== 0) return true;
   return false;
+}
+
+function parseResultDurationMs(content) {
+  if (!content || typeof content !== 'string') return 0;
+  const head = content.slice(0, 260);
+  const cMatch = head.match(/^Created At:\s*(.+)$/m);
+  const eMatch = head.match(/^Completed At:\s*(.+)$/m);
+  if (!cMatch || !eMatch) return 0;
+  const s = Date.parse(cMatch[1].trim());
+  const e = Date.parse(eMatch[1].trim());
+  if (Number.isFinite(s) && Number.isFinite(e) && e >= s) {
+    return Math.min(300_000, e - s);
+  }
+  return 0;
 }
 
 function buildHookIntervals(hookTimings) {
@@ -490,6 +546,17 @@ export function summarizeHookTelemetry(hookTimings, nowMs = Date.now()) {
 export function parseTranscript(text, { conversationId = '', title = '', workspace = '', workspaceUri = '', fileMtime = 0, hookTimings = null } = {}) {
   const hookIntervals = buildHookIntervals(hookTimings);
   const hookTelemetry = summarizeHookTelemetry(hookTimings);
+  const hookErrorSteps = new Set();
+  const hookPostToolTs = new Map();
+  if (Array.isArray(hookTimings)) {
+    for (const e of hookTimings) {
+      if (e && e.ev === 'PostToolUse' && Number.isFinite(Number(e.step))) {
+        const sIdx = Number(e.step);
+        if (e.err) hookErrorSteps.add(sIdx);
+        if (typeof e.ts === 'number' && !hookPostToolTs.has(sIdx)) hookPostToolTs.set(sIdx, e.ts);
+      }
+    }
+  }
   const steps = [];
   for (const line of String(text || '').split('\n')) {
     const trimmed = line.trim();
@@ -656,10 +723,19 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     const dateKey = toLocalDateKey(safePMs);
     const hourKey = toLocalHourKey(safePMs);
 
-    // Count explicit user turns up to this planner step
+    // Count explicit user turns & incoming media (images/attachments) up to this planner step
+    let stepMediaEst = 0;
+    let stepImageCount = 0;
     for (let j = prevPlannerIdx + 1; j < pIdx; j++) {
-      if (steps[j].type === 'USER_INPUT' && (steps[j].source === 'USER_EXPLICIT' || !steps[j].source)) {
+      const st = steps[j];
+      if (st.type === 'USER_INPUT' && (st.source === 'USER_EXPLICIT' || !st.source)) {
         currentTurnIndex++;
+      }
+      if (Array.isArray(st.media) && st.media.length) {
+        stepMediaEst += estimateMediaTokens(st.media);
+        for (const m of st.media) {
+          if (String(m?.mime_type || '').toLowerCase().startsWith('image/')) stepImageCount += 1;
+        }
       }
     }
     if (currentTurnIndex === 0) currentTurnIndex = 1;
@@ -677,13 +753,20 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     totalOutput += outTok;
     lastPromptTokens = promptTok;
     lastOutputTokens = outTok;
-    if (promptTok > peakContext) peakContext = promptTok;
+    if (promptTok + outTok > peakContext) peakContext = promptTok + outTok;
 
     if (!modelsUsed[model]) {
       modelsUsed[model] = {
         inputTokens: 0,
         cacheReadTokens: 0,
         outputTokens: 0,
+        textInputTokens: 0,
+        imageInputTokens: 0,
+        imageCount: 0,
+        outThinkingTokens: 0,
+        outReplyTokens: 0,
+        outToolCallTokens: 0,
+        toolCallCount: 0,
         calls: 0,
         durationMs: 0,
         timedOutputTokens: 0,
@@ -694,6 +777,36 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     modelsUsed[model].cacheReadTokens += cacheTok;
     modelsUsed[model].outputTokens += outTok;
     modelsUsed[model].calls += 1;
+
+    const stepImgTok = Math.min(inTok, stepMediaEst);
+    modelsUsed[model].imageInputTokens += stepImgTok;
+    modelsUsed[model].imageCount += stepImageCount;
+    modelsUsed[model].textInputTokens += Math.max(0, inTok - stepImgTok);
+
+    const tcs = Array.isArray(pStep.tool_calls) ? pStep.tool_calls : [];
+    const outWThink = pStep.thinking ? estimateTokens(pStep.thinking) : 0;
+    const outWReply = pStep.content ? estimateTokens(pStep.content) : 0;
+    const outWTool = tcs.length ? estimateTokens(JSON.stringify(tcs)) : 0;
+    const outWSum = outWThink + outWReply + outWTool;
+    let stepOutThink = 0;
+    let stepOutTool = 0;
+    let stepOutReply = 0;
+    if (outTok > 0) {
+      if (outWSum > 0) {
+        stepOutThink = Math.round((outWThink / outWSum) * outTok);
+        stepOutTool = Math.round((outWTool / outWSum) * outTok);
+        if (stepOutThink + stepOutTool > outTok) {
+          stepOutTool = Math.max(0, outTok - stepOutThink);
+        }
+        stepOutReply = Math.max(0, outTok - stepOutThink - stepOutTool);
+      } else {
+        stepOutReply = outTok;
+      }
+    }
+    modelsUsed[model].outThinkingTokens += stepOutThink;
+    modelsUsed[model].outReplyTokens += stepOutReply;
+    modelsUsed[model].outToolCallTokens += stepOutTool;
+    modelsUsed[model].toolCallCount += tcs.length;
 
     const mc = ensureModelContext(model);
     mc.calls += 1;
@@ -727,7 +840,6 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       hb.models[model].outputTokens += outTok;
     }
 
-    const tcs = Array.isArray(pStep.tool_calls) ? pStep.tool_calls : [];
     totalToolCalls += tcs.length;
     if (db) db.toolCalls += tcs.length;
 
@@ -740,15 +852,33 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     for (let tcIdx = 0; tcIdx < tcs.length; tcIdx++) {
       const tc = tcs[tcIdx];
       const tName = String(tc?.name || 'unknown');
-      if (!tools[tName]) tools[tName] = { count: 0, lastAt: 0, tokens: 0, errors: 0 };
+      const matchedResult = childGenerics[tcIdx] || null;
+      const resultMs = matchedResult ? parseMs(matchedResult.created_at) : NaN;
+      let tcDurMs = parseResultDurationMs(matchedResult?.content);
+      if (tcDurMs === 0 && matchedResult && Number.isFinite(resultMs)) {
+        const hookEnd = Number.isFinite(matchedResult.step_index) ? hookPostToolTs.get(matchedResult.step_index) : undefined;
+        if (Number.isFinite(hookEnd) && hookEnd >= resultMs) {
+          tcDurMs = Math.min(300_000, hookEnd - resultMs);
+        } else {
+          const nextStepObj = steps[Math.min(steps.length - 1, (matchedResult.step_index ?? pIdx) + 1)];
+          const nextMs = nextStepObj && nextStepObj.type !== 'USER_INPUT' ? parseMs(nextStepObj.created_at) : NaN;
+          if (Number.isFinite(nextMs) && nextMs >= resultMs) {
+            tcDurMs = Math.min(120_000, nextMs - resultMs);
+          }
+        }
+      }
+
+      if (!tools[tName]) tools[tName] = { count: 0, lastAt: 0, tokens: 0, durationMs: 0, errors: 0 };
       tools[tName].count += 1;
+      tools[tName].durationMs += tcDurMs;
       if (safePMs > tools[tName].lastAt) tools[tName].lastAt = safePMs;
 
       const args = tc?.args || {};
       const skillName = (tName === 'read_file' || tName === 'view_file') ? extractSkillName(args.Path || args.AbsolutePath) : null;
       if (skillName) {
-        if (!skills[skillName]) skills[skillName] = { count: 0, lastAt: 0, tokens: 0 };
+        if (!skills[skillName]) skills[skillName] = { count: 0, lastAt: 0, tokens: 0, durationMs: 0 };
         skills[skillName].count += 1;
+        skills[skillName].durationMs += tcDurMs;
         if (safePMs > skills[skillName].lastAt) skills[skillName].lastAt = safePMs;
       }
 
@@ -764,19 +894,15 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       if (tName === 'run_command' && args.CommandLine) {
         const rawCmd = unwrapArg(args.CommandLine);
         const cmds = extractCommands(rawCmd);
+        const cmdOutTok = estimateTokens(matchedResult?.content || '') + estimateTokens(rawCmd);
+        const perCmdTok = cmds.length ? Math.max(1, Math.round(cmdOutTok / cmds.length)) : 0;
+        const perCmdDur = cmds.length ? Math.round(tcDurMs / cmds.length) : 0;
         for (const c of cmds) {
-          if (!commands[c]) commands[c] = { count: 0, lastAt: 0 };
+          if (!commands[c]) commands[c] = { count: 0, lastAt: 0, tokens: 0, durationMs: 0 };
           commands[c].count += 1;
+          commands[c].tokens += perCmdTok;
+          commands[c].durationMs += perCmdDur;
           if (safePMs > commands[c].lastAt) commands[c].lastAt = safePMs;
-        }
-        const matchedResult = childGenerics[tcIdx] || null;
-        const resultMs = matchedResult ? parseMs(matchedResult.created_at) : NaN;
-        let cmdDurMs = 0;
-        if (matchedResult && Number.isFinite(resultMs)) {
-          const nextMs = parseMs(steps[Math.min(steps.length - 1, (matchedResult.step_index ?? pIdx) + 1)]?.created_at);
-          if (Number.isFinite(nextMs) && nextMs >= resultMs) {
-            cmdDurMs = Math.min(60_000, nextMs - resultMs);
-          }
         }
         commandLog.push({
           step: matchedResult?.step_index ?? (pStep.step_index ?? pIdx),
@@ -786,7 +912,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
           summary: unwrapArg(args.toolSummary || ''),
           binaries: cmds,
           failed: commandFailedFromOutput(matchedResult),
-          durationMs: cmdDurMs,
+          durationMs: tcDurMs,
           outputTokens: estimateTokens(matchedResult?.content || ''),
         });
       }
@@ -822,20 +948,40 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
             });
           }
           if (iW > 0) {
-            initInjItems.push({
-              label: 'Session metadata & environment',
-              detail: injectedText.slice(0, 200),
-              weight: iW,
-              step: st.step_index ?? j,
-              at: st.created_at || '',
-              ms: Number.isFinite(stMs) ? stMs : safePMs,
-            });
+            const subparts = splitInjectedSubparts(injectedText);
+            if (subparts.length) {
+              for (const sp of subparts) {
+                const sw = estimateTokens(sp.text);
+                if (sw <= 0) continue;
+                initInjItems.push({
+                  group: sp.group,
+                  label: sp.label,
+                  detail: sp.text.slice(0, 200),
+                  weight: sw,
+                  step: st.step_index ?? j,
+                  at: st.created_at || '',
+                  ms: Number.isFinite(stMs) ? stMs : safePMs,
+                });
+              }
+            } else {
+              initInjItems.push({
+                group: 'other',
+                label: 'Other injected',
+                detail: injectedText.slice(0, 200),
+                weight: iW,
+                step: st.step_index ?? j,
+                at: st.created_at || '',
+                ms: Number.isFinite(stMs) ? stMs : safePMs,
+              });
+            }
           }
         } else {
           const w = estimateTokens(st.content || '');
           injectedEst += w;
           if (w > 0) {
+            const g = st.type === 'CHECKPOINT' ? 'compaction' : 'other';
             initInjItems.push({
+              group: g,
               label: st.type || 'System injection',
               detail: String(st.content || '').slice(0, 200),
               weight: w,
@@ -853,38 +999,19 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
 
       currentBuckets.system_prompt += sysTok;
       currentBuckets.tool_definitions += toolDefTok;
-      if (sysTok > 0) {
-        categoryItems.system_prompt.push({
-          label: 'Antigravity core instructions, rules & skills index',
-          detail: 'Base system prompt loaded at session start',
-          tokens: sysTok,
-          step: pStep.step_index ?? pIdx,
-          at: pStep.created_at || '',
-          ms: safePMs,
-        });
-      }
-      if (toolDefTok > 0) {
-        categoryItems.tool_definitions.push({
-          label: 'Built-in & MCP tool declarations',
-          detail: 'Tool schemas available to the agent',
-          tokens: toolDefTok,
-          step: pStep.step_index ?? pIdx,
-          at: pStep.created_at || '',
-          ms: safePMs,
-        });
-      }
 
       if (nonBaseline > 0) {
         const uShare = Math.round((userEst / Math.max(1, userEst + injectedEst)) * nonBaseline);
         const iShare = nonBaseline - uShare;
         currentBuckets.user_messages += uShare;
         currentBuckets.injected_content += iShare;
+        const initInjWTotal = initInjItems.reduce((a, x) => a + x.weight, 0) || 1;
         for (const it of initUserItems) {
           const tok = Math.max(1, Math.round((it.weight / Math.max(1, userEst)) * uShare));
           categoryItems.user_messages.push({ ...it, tokens: tok });
         }
         for (const it of initInjItems) {
-          const tok = Math.max(1, Math.round((it.weight / Math.max(1, injectedEst)) * iShare));
+          const tok = Math.max(1, Math.round((it.weight / initInjWTotal) * iShare));
           categoryItems.injected_content.push({ ...it, tokens: tok });
         }
       }
@@ -961,16 +1088,36 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
             });
           }
           if (injW > 0) {
-            stepItems.push({
-              label: 'Turn metadata / settings',
-              detail: injectedText.slice(0, 180),
-              category: 'injected_content',
-              tool: 'system',
-              weight: injW,
-              step: st.step_index ?? j,
-              at: st.created_at || '',
-              ms: safeStMs,
-            });
+            const subparts = splitInjectedSubparts(injectedText);
+            if (subparts.length) {
+              for (const sp of subparts) {
+                const sw = estimateTokens(sp.text);
+                if (sw <= 0) continue;
+                stepItems.push({
+                  group: sp.group,
+                  label: sp.label,
+                  detail: sp.text.slice(0, 180),
+                  category: 'injected_content',
+                  tool: 'system',
+                  weight: sw,
+                  step: st.step_index ?? j,
+                  at: st.created_at || '',
+                  ms: safeStMs,
+                });
+              }
+            } else {
+              stepItems.push({
+                group: 'other',
+                label: 'Other injected',
+                detail: injectedText.slice(0, 180),
+                category: 'injected_content',
+                tool: 'system',
+                weight: injW,
+                step: st.step_index ?? j,
+                at: st.created_at || '',
+                ms: safeStMs,
+              });
+            }
           }
         } else if (st.type === 'GENERIC') {
           const matchedTc = prevCalls[genericIdx] || null;
@@ -981,7 +1128,9 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
             : { label: 'Tool output', detail: '', category: 'tool_calls', tool: 'tool' };
           weights[desc.category] += w;
           const tName = matchedTc?.name || null;
-          if (st.status === 'ERROR' && tName && tools[tName]) {
+          const isFailed = commandFailedFromOutput(st)
+            || (Number.isFinite(st.step_index) && hookErrorSteps.has(st.step_index));
+          if (isFailed && tName && tools[tName]) {
             tools[tName].errors += 1;
           }
           stepItems.push({
@@ -991,7 +1140,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
             step: st.step_index ?? j,
             at: st.created_at || '',
             ms: safeStMs,
-            status: st.status || 'DONE',
+            status: isFailed ? 'ERROR' : (st.status || 'DONE'),
           });
         } else {
           const w = estimateTokens(st.content || '');
@@ -1046,6 +1195,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
           }
           if (categoryItems[item.category]) {
             categoryItems[item.category].push({
+              group: item.group || '',
               label: item.label,
               detail: item.detail,
               tool: item.tool,
@@ -1221,6 +1371,105 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     }
   }
 
+  // Merge skill_injection by skill name (normalized to currentBuckets.skill_injection)
+  if (categoryItems.skill_injection.length > 0) {
+    const grouped = new Map();
+    let rawSum = 0;
+    for (const it of categoryItems.skill_injection) {
+      const key = String(it.label || 'skill');
+      const tok = Math.max(0, it.tokens || 0);
+      rawSum += tok;
+      if (!grouped.has(key)) {
+        grouped.set(key, { label: key, count: 0, rawTokens: 0, detail: it.detail || '' });
+      }
+      const rec = grouped.get(key);
+      rec.count += 1;
+      rec.rawTokens += tok;
+      if (it.detail && !rec.detail) rec.detail = it.detail;
+    }
+    const targetSkill = currentBuckets.skill_injection || rawSum;
+    const merged = [...grouped.values()].map((rec) => ({
+      label: rec.label,
+      count: rec.count,
+      tokens: rawSum > 0 ? Math.max(1, Math.round((rec.rawTokens / rawSum) * targetSkill)) : 0,
+      detail: rec.detail,
+      tool: 'skill',
+      step: 0,
+    }));
+    merged.sort((a, b) => b.tokens - a.tokens);
+    categoryItems.skill_injection = merged;
+  }
+
+  // Merge tool_calls by (tool name, success/error) so failed calls are tallied on their own row
+  if (categoryItems.tool_calls.length > 0) {
+    const grouped = new Map();
+    let rawSum = 0;
+    for (const it of categoryItems.tool_calls) {
+      const toolName = String(it.tool || it.label || 'tool');
+      const isErr = it.status === 'ERROR';
+      const key = `${toolName}:${isErr ? 'err' : 'ok'}`;
+      const tok = Math.max(0, it.tokens || 0);
+      rawSum += tok;
+      if (!grouped.has(key)) {
+        grouped.set(key, { label: toolName, tool: toolName, failed: isErr, count: 0, rawTokens: 0, samples: [] });
+      }
+      const rec = grouped.get(key);
+      rec.count += 1;
+      rec.rawTokens += tok;
+      if (it.label) rec.samples.push({ label: it.label, tokens: tok, step: it.step || 0 });
+    }
+    const targetTools = currentBuckets.tool_calls || rawSum;
+    const merged = [...grouped.values()].map((rec) => {
+      const topSamples = rec.samples
+        .sort((a, b) => b.tokens - a.tokens)
+        .slice(0, 6)
+        .map((s) => `${s.step ? `#${s.step} ` : ''}${s.label}`)
+        .join('\n');
+      return {
+        label: rec.label,
+        tool: rec.tool,
+        count: rec.count,
+        failed: rec.failed,
+        status: rec.failed ? 'ERROR' : 'DONE',
+        tokens: rawSum > 0 ? Math.max(1, Math.round((rec.rawTokens / rawSum) * targetTools)) : 0,
+        detail: topSamples,
+        step: 0,
+      };
+    });
+    merged.sort((a, b) => b.tokens - a.tokens);
+    categoryItems.tool_calls = merged;
+  }
+
+  // Merge injected_content into clean grouped buckets (time, image, compaction, settings, other)
+  // normalized proportionally to currentBuckets.injected_content so sums stay aligned after compaction.
+  if (categoryItems.injected_content.length > 0) {
+    const grouped = new Map();
+    let rawSum = 0;
+    for (const it of categoryItems.injected_content) {
+      const g = it.group || 'other';
+      rawSum += Math.max(0, it.tokens || 0);
+      if (!grouped.has(g)) {
+        grouped.set(g, { group: g, label: it.label || g, count: 0, rawTokens: 0, lastDetail: '' });
+      }
+      const rec = grouped.get(g);
+      rec.count += 1;
+      rec.rawTokens += Math.max(0, it.tokens || 0);
+      if (it.detail) rec.lastDetail = it.detail;
+    }
+    const targetInj = currentBuckets.injected_content || rawSum;
+    const merged = [...grouped.values()].map((rec) => ({
+      group: rec.group,
+      label: rec.label,
+      count: rec.count,
+      tokens: rawSum > 0 ? Math.max(1, Math.round((rec.rawTokens / rawSum) * targetInj)) : 0,
+      detail: rec.lastDetail,
+      tool: 'system',
+      step: 0,
+    }));
+    merged.sort((a, b) => b.tokens - a.tokens);
+    categoryItems.injected_content = merged;
+  }
+
   // Enrich modelsUsed & modelContext with aggregate speed/token stats
   const modelsBreakdown = Object.entries(modelsUsed)
     .map(([m, mu]) => {
@@ -1247,22 +1496,40 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       inputTokens: 0,
       cacheReadTokens: 0,
       outputTokens: 0,
+      textInputTokens: 0,
+      imageInputTokens: 0,
+      imageCount: 0,
+      outThinkingTokens: 0,
+      outReplyTokens: 0,
+      outToolCallTokens: 0,
+      toolCallCount: 0,
       calls: 0,
       durationMs: 0,
       timedOutputTokens: 0,
       timedDurationMs: 0,
     };
     const totalIn = mu.inputTokens + mu.cacheReadTokens;
+    const totalAll = totalIn + mu.outputTokens;
     const tMs = mu.timedDurationMs || 0;
     const tOut = mu.timedOutputTokens || 0;
+    const typeBreakdown = [
+      { type: 'cache_read', tokens: mu.cacheReadTokens, rate: totalIn > 0 ? mu.cacheReadTokens / totalIn : 0 },
+      { type: 'text_input', tokens: mu.textInputTokens },
+      { type: 'image_input', tokens: mu.imageInputTokens, count: mu.imageCount },
+      { type: 'thinking', tokens: mu.outThinkingTokens },
+      { type: 'tool_call', tokens: mu.outToolCallTokens, count: mu.toolCallCount },
+      { type: 'reply', tokens: mu.outReplyTokens },
+    ].filter((x) => x.tokens > 0);
     return {
       ...mc,
       inputTokens: mu.inputTokens,
       cacheReadTokens: mu.cacheReadTokens,
       outputTokens: mu.outputTokens,
+      totalTokens: totalAll,
       cacheHitRate: totalIn > 0 ? mu.cacheReadTokens / totalIn : 0,
       durationMs: mu.durationMs,
       tokPerSec: tMs > 0 ? Math.round((tOut / (tMs / 1000)) * 10) / 10 : 0,
+      typeBreakdown,
     };
   }).sort((a, b) => b.total - a.total);
 
@@ -1394,6 +1661,31 @@ function extractInjectedBlocks(injectedText) {
   return blocks;
 }
 
+function detectSystemBadges(tag, text) {
+  const badges = [];
+  const body = String(text || '');
+  const upperTag = String(tag || '').toUpperCase();
+  if (/The current local time is:/i.test(body)) badges.push('time');
+  if (
+    /The user has uploaded\s+\d+\s+image\(s\)/i.test(body)
+    || (/uploaded/i.test(body) && /\.(png|jpe?g|webp|gif|bmp)\b/i.test(body))
+  ) {
+    badges.push('image');
+  } else if (
+    /The user has uploaded\s+\d+\s+(?:file|document|attachment|audio|video)/i.test(body)
+    || /attached\s+\d*\s*file/i.test(body)
+  ) {
+    badges.push('attachment');
+  }
+  if (upperTag === 'COMPACTION' || upperTag === 'CONTEXT_SUMMARY' || upperTag === 'CHECKPOINT') {
+    badges.push('compaction');
+  }
+  if (upperTag.includes('SETTINGS')) {
+    badges.push('settings');
+  }
+  return badges;
+}
+
 /**
  * Parses a transcript JSONL string into a full chronological interaction trace:
  *   - summary items (lightweight list for fast rendering even on 2000+ step sessions)
@@ -1477,7 +1769,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
       // Emit each injected metadata / settings block as its own visible trace entry
       for (const blk of extractInjectedBlocks(injectedText)) {
         const flat = blk.text.replace(/\s+/g, ' ').trim();
-        const isTimeContext = blk.tag === 'ADDITIONAL_METADATA' && /The current local time is:/i.test(blk.text);
+        const sysBadges = detectSystemBadges(blk.tag, blk.text);
         pushEntry(
           {
             kind: 'system',
@@ -1489,7 +1781,8 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             status: 'INJECTED',
             hasError: false,
             systemType: blk.tag,
-            systemBadge: isTimeContext ? 'time_context' : '',
+            systemBadge: sysBadges[0] || '',
+            systemBadges: sysBadges,
             preview: flat.slice(0, 160),
           },
           {
@@ -1523,6 +1816,8 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             status: 'COMPACTED',
             hasError: false,
             systemType: 'COMPACTION',
+            systemBadge: 'compaction',
+            systemBadges: ['compaction'],
             preview: `Context compacted: ${prevPromptTokens.toLocaleString()} → ${promptTok.toLocaleString()} (-${saved.toLocaleString()} tokens)`,
           },
           {
@@ -1592,7 +1887,14 @@ export function parseTrace(text, { hookTimings = null } = {}) {
         {
           thinking: thinkingText.slice(0, MAX_DETAIL_CHARS),
           content: replyText.slice(0, MAX_DETAIL_CHARS),
-          toolCalls: tcs.map((tc) => ({ name: tc?.name || 'tool', args: cleanArgsObject(tc?.args) })),
+          toolCalls: tcs.map((tc) => {
+            const cleanArgs = cleanArgsObject(tc?.args);
+            const tcName = tc?.name || 'tool';
+            const sk = (tcName === 'read_file' || tcName === 'view_file')
+              ? extractSkillName(cleanArgs.Path || cleanArgs.AbsolutePath)
+              : null;
+            return { name: sk || tcName, rawToolName: tcName, isSkill: Boolean(sk), args: cleanArgs };
+          }),
           childToolIdxs: [],
         },
       );
@@ -1673,6 +1975,8 @@ export function parseTrace(text, { hookTimings = null } = {}) {
       const contentText = String(st.content || '');
       const preview = contentText.replace(/\s+/g, ' ').trim();
       if (preview || st.type) {
+        const sysType = String(st.type || st.source || 'SYSTEM');
+        const sysBadges = detectSystemBadges(sysType, contentText);
         pushEntry(
           {
             kind: 'system',
@@ -1683,7 +1987,9 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             durationMs: 0,
             status: st.status || 'DONE',
             hasError: st.status === 'ERROR',
-            systemType: String(st.type || st.source || 'SYSTEM'),
+            systemType: sysType,
+            systemBadge: sysBadges[0] || '',
+            systemBadges: sysBadges,
             preview: preview.slice(0, 160),
           },
           {

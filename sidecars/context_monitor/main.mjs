@@ -13,11 +13,11 @@
  * lightweight `node:http` server when launched standalone for development.
  */
 
-import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { execFile, execFileSync } from 'node:child_process';
+import { cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATEGORIES, DEFAULT_MODEL_SPECS, emptyBuckets, estimateTokens, parseTrace, parseTranscript } from './parser.mjs';
 
@@ -554,9 +554,9 @@ export function buildUsageSeries({ range, startKey, endKey, dailyMap, hourlyMap,
     return buildDailySeries(s, e, dailyMap);
   }
 
-  // range === 'all': adaptive bucketing by actual active span
-  const sKey = minDateKey || todayKey;
-  const eKey = maxDateKey || sKey;
+  // range === 'all' or 'custom': adaptive bucketing by actual active span
+  const sKey = (range === 'custom' ? startKey : '') || minDateKey || todayKey;
+  const eKey = (range === 'custom' ? endKey : '') || maxDateKey || sKey;
   const span = diffDays(sKey, eKey);
   if (span <= 1 && sKey === eKey) {
     return buildHourlySeries(sKey, hourlyMap);
@@ -573,11 +573,26 @@ export function buildUsageSeries({ range, startKey, endKey, dailyMap, hourlyMap,
   return buildYearlySeries(sKey, eKey, dailyMap);
 }
 
-function resolveDateBounds(range, exactDate) {
+function resolveDateBounds(range, exactDate, customStart = '', customEnd = '') {
   const now = new Date();
   const todayKey = toLocalDateKey(now);
-  if (exactDate && /^\d{4}-\d{2}-\d{2}$/.test(exactDate)) {
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (exactDate && DATE_RE.test(exactDate)) {
     return { startKey: exactDate, endKey: exactDate, range: 'date' };
+  }
+  const hasStart = DATE_RE.test(customStart);
+  const hasEnd = DATE_RE.test(customEnd);
+  if (range === 'custom' || hasStart || hasEnd) {
+    if (hasStart && hasEnd) {
+      const sKey = customStart <= customEnd ? customStart : customEnd;
+      const eKey = customStart <= customEnd ? customEnd : customStart;
+      return { startKey: sKey, endKey: eKey, range: 'custom' };
+    }
+    return {
+      startKey: hasStart ? customStart : '',
+      endKey: hasEnd ? customEnd : '',
+      range: 'custom',
+    };
   }
   if (range === 'today') {
     return { startKey: todayKey, endKey: todayKey, range: 'today' };
@@ -601,8 +616,8 @@ function matchesWorkspace(session, targetWs, targetWsUri) {
   return Boolean(targetName && sessName && targetName === sessName);
 }
 
-function buildOverview({ range = '30d', date = '', workspace = '', workspaceUri = '', etag = '' } = {}) {
-  const bounds = resolveDateBounds(range, date);
+function buildOverview({ range = '30d', date = '', start = '', end = '', workspace = '', workspaceUri = '', etag = '' } = {}) {
+  const bounds = resolveDateBounds(range, date, start, end);
   const allEntries = listAllConversations();
 
   const parsedAll = [];
@@ -760,23 +775,27 @@ function buildOverview({ range = '30d', date = '', workspace = '', workspaceUri 
     }
 
     for (const [name, sv] of Object.entries(s.skills)) {
-      if (!skillsAgg[name]) skillsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0 };
+      if (!skillsAgg[name]) skillsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0, durationMs: 0 };
       skillsAgg[name].count += sv.count;
-      skillsAgg[name].tokens += sv.tokens;
+      skillsAgg[name].tokens += sv.tokens || 0;
+      skillsAgg[name].durationMs += sv.durationMs || 0;
       if (sv.lastAt > skillsAgg[name].lastAt) skillsAgg[name].lastAt = sv.lastAt;
     }
 
     for (const [name, tv] of Object.entries(s.tools)) {
-      if (!toolsAgg[name]) toolsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0, errors: 0 };
+      if (!toolsAgg[name]) toolsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0, durationMs: 0, errors: 0 };
       toolsAgg[name].count += tv.count;
-      toolsAgg[name].tokens += tv.tokens;
-      toolsAgg[name].errors += tv.errors;
+      toolsAgg[name].tokens += tv.tokens || 0;
+      toolsAgg[name].durationMs += tv.durationMs || 0;
+      toolsAgg[name].errors += tv.errors || 0;
       if (tv.lastAt > toolsAgg[name].lastAt) toolsAgg[name].lastAt = tv.lastAt;
     }
 
     for (const [name, cv] of Object.entries(s.commands)) {
-      if (!commandsAgg[name]) commandsAgg[name] = { name, count: 0, lastAt: 0 };
+      if (!commandsAgg[name]) commandsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0, durationMs: 0 };
       commandsAgg[name].count += cv.count;
+      commandsAgg[name].tokens += cv.tokens || 0;
+      commandsAgg[name].durationMs += cv.durationMs || 0;
       if (cv.lastAt > commandsAgg[name].lastAt) commandsAgg[name].lastAt = cv.lastAt;
     }
 
@@ -818,8 +837,16 @@ function buildOverview({ range = '30d', date = '', workspace = '', workspaceUri 
   const totalPrompt = totalInput + totalCacheRead;
   const totalTokens = totalPrompt + totalOutput;
   const cacheHitRate = totalPrompt > 0 ? totalCacheRead / totalPrompt : 0;
+  let totalTimedOut = 0;
+  let totalTimedMs = 0;
+  for (const mv of Object.values(modelsUsed)) {
+    totalTimedOut += mv.timedOutputTokens || 0;
+    totalTimedMs += mv.timedDurationMs || 0;
+  }
   const totalModelMs = modelWaitMs + thinkingMs + replyMs + toolArgsMs;
-  const outputTokPerSec = totalModelMs > 0 ? Math.round((totalOutput / (totalModelMs / 1000)) * 10) / 10 : 0;
+  const outputTokPerSec = totalTimedMs > 0
+    ? Math.round((totalTimedOut / (totalTimedMs / 1000)) * 10) / 10
+    : (totalModelMs > 0 ? Math.round((totalOutput / (totalModelMs / 1000)) * 10) / 10 : 0);
 
   const modelsBreakdown = Object.entries(modelsUsed)
     .map(([m, mv]) => {
@@ -873,8 +900,10 @@ function buildOverview({ range = '30d', date = '', workspace = '', workspaceUri 
     scope: (workspace || workspaceUri) ? 'project' : 'global',
     workspace: workspace || workspaceNameFromUri(workspaceUri) || '',
     range: bounds.range,
-    startDate: bounds.startKey || minDateKey || toLocalDateKey(new Date()),
-    endDate: bounds.endKey || maxDateKey || toLocalDateKey(new Date()),
+    startDate: bounds.startKey || hmMinDate || minDateKey || toLocalDateKey(new Date()),
+    endDate: bounds.endKey || hmMaxDate || maxDateKey || toLocalDateKey(new Date()),
+    dataMinDate: hmMinDate || minDateKey || '',
+    dataMaxDate: hmMaxDate || maxDateKey || '',
     defaultModelSpecs: DEFAULT_MODEL_SPECS,
     kpi: {
       totalSessions: filtered.length,
@@ -965,6 +994,7 @@ function handleSession(data, defaultConvId) {
         model: d.model,
         systemType: d.systemType,
         systemBadge: d.systemBadge,
+        systemBadges: d.systemBadges,
         outputTokens: d.outputTokens,
         toolCount: d.toolCount,
         preview: d.preview,
@@ -982,10 +1012,6 @@ function handleSession(data, defaultConvId) {
     ...res.parsed,
     recentTrace,
     traceCount: trace?.counts?.total || 0,
-    categoryItems: {
-      ...res.parsed.categoryItems,
-      system_prompt: discoverSystemPromptItems(res.parsed.workspaceUri, res.parsed.composition?.system_prompt || 0),
-    },
   };
   return {
     conversationId: convId,
@@ -1000,6 +1026,8 @@ function handleOverview(data) {
   return buildOverview({
     range: String(data.range || '30d'),
     date: String(data.date || ''),
+    start: String(data.start || ''),
+    end: String(data.end || ''),
     workspace: String(data.workspace || ''),
     workspaceUri: String(data.workspaceUri || ''),
     etag: String(data.etag || ''),
@@ -1040,12 +1068,26 @@ function handleTraceDetail(data, defaultConvId) {
 }
 
 // ---------------------------------------------------------------------------
-// Plugin version & optional GitHub update check (read-only, on-demand)
+// Plugin version, GitHub update check & self-update with live progress
 // ---------------------------------------------------------------------------
+
+const PLUGIN_ROOT = resolve(__dirname, '..', '..');
+const VERSION_CACHE_MS = 10 * 60 * 1000;
+let versionCache = { ts: 0, result: null };
+
+let updateState = {
+  status: 'idle', // idle | checking | downloading | installing | reloading | error
+  pct: 0,
+  bytesLoaded: 0,
+  bytesTotal: 0,
+  speedBps: 0,
+  version: '',
+  error: '',
+};
 
 function readPluginManifest() {
   try {
-    const raw = readFileSync(join(__dirname, '..', '..', 'plugin.json'), 'utf-8');
+    const raw = readFileSync(join(PLUGIN_ROOT, 'plugin.json'), 'utf-8');
     const json = JSON.parse(raw);
     const repo = typeof json.repository === 'string'
       ? json.repository
@@ -1085,52 +1127,194 @@ async function handleVersion(data) {
     hasUpdate: false,
     latestVersion: '',
     releaseUrl: manifest.repository,
+    downloadUrl: '',
     error: '',
   };
   if (data.check !== '1') return base;
   if (!slug) {
     return { ...base, checked: true, error: 'no_repository' };
   }
+  if (data.force !== '1' && versionCache.result && Date.now() - versionCache.ts < VERSION_CACHE_MS) {
+    const cached = versionCache.result;
+    return {
+      ...cached,
+      currentVersion: manifest.version,
+      hasUpdate: cached.latestVersion ? compareSemver(cached.latestVersion, manifest.version) > 0 : false,
+    };
+  }
 
   try {
     // 1. Check latest GitHub Release first
     const relRes = await fetch(`https://api.github.com/repos/${slug}/releases/latest`, {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'agy-context' },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(6000),
     });
     if (relRes.ok) {
       const rel = await relRes.json();
-      const latest = String(rel.tag_name || '').replace(/^v/i, '');
+      const tagName = String(rel.tag_name || '').trim();
+      const latest = tagName.replace(/^v/i, '');
       if (latest) {
-        return {
+        const out = {
           ...base,
           checked: true,
           latestVersion: latest,
           hasUpdate: compareSemver(latest, manifest.version) > 0,
           releaseUrl: rel.html_url || manifest.repository,
+          downloadUrl: `https://codeload.github.com/${slug}/tar.gz/refs/tags/${encodeURIComponent(tagName)}`,
         };
+        versionCache = { ts: Date.now(), result: out };
+        return out;
       }
     }
     // 2. Fallback: read plugin.json on default branch
     const rawRes = await fetch(`https://raw.githubusercontent.com/${slug}/main/plugin.json`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(6000),
     });
     if (rawRes.ok) {
       const remoteManifest = await rawRes.json();
       const latest = String(remoteManifest.version || '').replace(/^v/i, '');
       if (latest) {
-        return {
+        const out = {
           ...base,
           checked: true,
           latestVersion: latest,
           hasUpdate: compareSemver(latest, manifest.version) > 0,
           releaseUrl: manifest.repository,
+          downloadUrl: `https://codeload.github.com/${slug}/tar.gz/refs/heads/main`,
         };
+        versionCache = { ts: Date.now(), result: out };
+        return out;
       }
     }
     return { ...base, checked: true, error: 'fetch_failed' };
   } catch {
     return { ...base, checked: true, error: 'network_error' };
+  }
+}
+
+function getUpdateStatus() {
+  return { ...updateState, currentVersion: readPluginManifest().version };
+}
+
+function handleStartUpdate() {
+  if (updateState.status === 'checking' || updateState.status === 'downloading' || updateState.status === 'installing' || updateState.status === 'reloading') {
+    return getUpdateStatus();
+  }
+  updateState = {
+    status: 'checking',
+    pct: 0,
+    bytesLoaded: 0,
+    bytesTotal: 0,
+    speedBps: 0,
+    version: '',
+    error: '',
+  };
+  runSelfUpdate().catch((err) => {
+    updateState = {
+      ...updateState,
+      status: 'error',
+      error: String(err?.message || err || 'Update failed'),
+    };
+  });
+  return getUpdateStatus();
+}
+
+async function runSelfUpdate() {
+  const ver = await handleVersion({ check: '1', force: '1' });
+  if (ver.error || !ver.downloadUrl) {
+    throw new Error(ver.error || 'No download source available');
+  }
+  if (!/^https:\/\/codeload\.github\.com\/[^/\s]+\/[^/\s]+\/tar\.gz\//i.test(ver.downloadUrl)) {
+    throw new Error('Untrusted download URL');
+  }
+
+  updateState = {
+    status: 'downloading',
+    pct: 0,
+    bytesLoaded: 0,
+    bytesTotal: 0,
+    speedBps: 0,
+    version: ver.latestVersion || '',
+    error: '',
+  };
+
+  const workDir = join(tmpdir(), `agy-context-upd-${Date.now()}`);
+  const tarPath = join(workDir, 'release.tar.gz');
+  const extractDir = join(workDir, 'extract');
+  mkdirSync(extractDir, { recursive: true });
+
+  try {
+    const res = await fetch(ver.downloadUrl, {
+      headers: { 'User-Agent': 'agy-context' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const totalHeader = Number(res.headers.get('content-length')) || 0;
+    updateState.bytesTotal = totalHeader;
+
+    const reader = res.body.getReader();
+    const ws = createWriteStream(tarPath);
+    const startedAt = Date.now();
+    let loaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength) {
+        loaded += value.byteLength;
+        ws.write(Buffer.from(value));
+        const elapsedSec = Math.max(0.05, (Date.now() - startedAt) / 1000);
+        updateState.bytesLoaded = loaded;
+        updateState.speedBps = Math.round(loaded / elapsedSec);
+        if (totalHeader > 0) {
+          updateState.pct = Math.min(99, Math.round((loaded / totalHeader) * 100));
+        }
+      }
+    }
+    await new Promise((resClose, rejClose) => {
+      ws.end(() => resClose());
+      ws.on('error', rejClose);
+    });
+
+    updateState.status = 'installing';
+    updateState.pct = 100;
+
+    execFileSync('tar', ['-xzf', tarPath, '-C', extractDir], { timeout: 15_000 });
+    const entries = readdirSync(extractDir).filter((n) => !n.startsWith('.'));
+    const srcRoot = entries.length === 1 ? join(extractDir, entries[0]) : extractDir;
+    if (!existsSync(join(srcRoot, 'plugin.json'))) {
+      throw new Error('Invalid plugin archive');
+    }
+
+    const COPY_ITEMS = [
+      'plugin.json',
+      'hooks.json',
+      'hooks',
+      'sidecars',
+      'skills',
+      'assets',
+      'README.md',
+      'LICENSE',
+      'install.sh',
+    ];
+    for (const item of COPY_ITEMS) {
+      const from = join(srcRoot, item);
+      if (existsSync(from)) {
+        cpSync(from, join(PLUGIN_ROOT, item), { recursive: true, force: true });
+      }
+    }
+
+    versionCache = { ts: 0, result: null };
+    updateState.status = 'reloading';
+    // Sidecar has restart_policy: "always", so exiting cleanly restarts the
+    // backend process on the newly installed code while the UI auto-reloads.
+    setTimeout(() => { process.exit(0); }, 700);
+  } finally {
+    try { rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 }
 
@@ -1163,12 +1347,14 @@ if (isEntrypoint) {
       app.api(route, () => new Response(readFileSync(join(__dirname, file), 'utf-8'), { contentType }), 'GET');
     }
 
-    app.api('/api/health', () => ({ ok: true, appDataDirs: findAppDataDirs() }), 'GET');
+    app.api('/api/health', () => ({ ok: true, version: readPluginManifest().version, appDataDirs: findAppDataDirs() }), 'GET');
     app.api('/api/session', (data) => handleSession(data, app.config?.conversationId), 'GET');
     app.api('/api/trace', (data) => handleTrace(data, app.config?.conversationId), 'GET');
     app.api('/api/trace-detail', (data) => handleTraceDetail(data, app.config?.conversationId), 'GET');
     app.api('/api/overview', (data) => handleOverview(data), 'GET');
     app.api('/api/version', async (data) => handleVersion(data), 'GET');
+    app.api('/api/update/start', () => handleStartUpdate(), 'POST');
+    app.api('/api/update/status', () => getUpdateStatus(), 'GET');
 
     console.log(`[agy-context] starting via sidecar_sdk; appDataDirs=${findAppDataDirs().join(', ')}`);
     app.run();
@@ -1198,7 +1384,7 @@ if (isEntrypoint) {
         }
         if (pathname === '/api/health') {
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({ ok: true, standalone: true, appDataDirs: findAppDataDirs() }));
+          res.end(JSON.stringify({ ok: true, standalone: true, version: readPluginManifest().version, appDataDirs: findAppDataDirs() }));
           return;
         }
         if (pathname === '/api/session') {
@@ -1225,6 +1411,16 @@ if (isEntrypoint) {
           const out = await handleVersion(data);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(out));
+          return;
+        }
+        if (pathname === '/api/update/start' && req.method === 'POST') {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(handleStartUpdate()));
+          return;
+        }
+        if (pathname === '/api/update/status') {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(getUpdateStatus()));
           return;
         }
         res.writeHead(404, { 'Content-Type': 'text/plain' });
