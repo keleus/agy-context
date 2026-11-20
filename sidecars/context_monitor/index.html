@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AGY Context</title>
+  <script src="/preload.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Compact Sticky Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <nav id="ctx-tabs" class="seg-tabs" role="tablist" aria-label="View switch">
+          <button type="button" role="tab" id="tab-session" data-tab="session" class="seg-tab active" aria-selected="true" data-i18n="tab.session">Session</button>
+          <button type="button" role="tab" id="tab-project" data-tab="project" class="seg-tab" aria-selected="false" data-i18n="tab.project">Project</button>
+          <button type="button" role="tab" id="tab-global" data-tab="global" class="seg-tab" aria-selected="false" data-i18n="tab.global">Global</button>
+        </nav>
+        <div id="trace-pane-head" class="trace-pane-head hidden">
+          <span class="trace-pane-title" data-i18n="tab.trace">Trace</span>
+          <span id="trace-total-count" class="count-pill">0</span>
+        </div>
+        <span id="live-pill" class="live-pill">
+          <span class="live-dot"></span>
+          <span id="live-label" data-i18n="live.ok">Live</span>
+        </span>
+      </div>
+      <div class="topbar-right">
+        <button type="button" id="btn-trace-follow" class="follow-btn active hidden" aria-pressed="true" data-i18n-title="trace.followTip" title="Auto-scroll to latest events">
+          <span class="follow-dot"></span>
+          <span data-i18n="trace.follow">Follow</span>
+        </button>
+        <button type="button" id="btn-lang" class="lang-btn" title="Switch language / 切换语言">EN</button>
+        <button type="button" id="btn-settings" class="icon-btn" data-i18n-title="settings.title" title="Settings" aria-label="Settings">
+          <svg class="icon" viewBox="0 0 24 24" style="stroke-width:2" aria-hidden="true">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ================================================================
+         TAB 1: CURRENT SESSION (Compact live context monitor)
+         ================================================================ -->
+    <main id="view-session" class="view active" role="tabpanel" aria-labelledby="tab-session">
+      <!-- Only visible when inspecting a historical session clicked from Overview -->
+      <div id="inspect-banner" class="inspect-banner hidden">
+        <div class="inspect-left">
+          <span class="inspect-label" data-i18n="inspect.viewing">Inspecting</span>
+          <strong id="inspect-title" class="inspect-title"></strong>
+        </div>
+        <div class="inspect-actions">
+          <button type="button" id="btn-open-inspected" class="ghost-btn xs hidden" data-i18n="inspect.open">Open</button>
+          <button type="button" id="btn-back-current" class="primary-btn xs" data-i18n="inspect.back">Back to current</button>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="session-empty" class="empty-state hidden">
+        <div class="empty-title" id="session-empty-title"></div>
+        <div class="empty-desc" id="session-empty-desc"></div>
+        <button type="button" id="btn-goto-overview" class="ghost-btn sm" data-i18n="empty.gotoOverview">View Global Overview</button>
+      </div>
+
+      <div id="session-content" class="session-content hidden">
+        <!-- Main Context Window Card (Horizontal bar + expandable single-row list) -->
+        <section class="card ctx-card">
+          <!-- Model + Speed + Cost metadata row (no session title, no health badge) -->
+          <div class="ctx-meta-row">
+            <div class="ctx-meta-left">
+              <span id="s-model" class="model-chip"></span>
+              <span id="s-compactions" class="compact-chip hidden"></span>
+            </div>
+            <div class="ctx-meta-right">
+              <span id="s-speed-chip" class="stat-chip" title="Output speed"></span>
+            </div>
+          </div>
+
+          <!-- Occupancy headline -->
+          <div class="ctx-headline">
+            <div class="ctx-headline-left">
+              <span id="s-ctx-used" class="ctx-used">0</span>
+              <span class="ctx-slash">/</span>
+              <span id="s-ctx-limit" class="ctx-limit">500k</span>
+              <span class="ctx-unit" data-i18n="unit.tokens">tokens</span>
+            </div>
+            <span id="s-ctx-pct" class="ctx-pct">0%</span>
+          </div>
+
+          <!-- Full-window horizontal bar (includes Free Space) -->
+          <div class="ctx-bar-wrap">
+            <div id="s-stack-bar" class="ctx-bar" role="img" aria-label="Context window usage"></div>
+          </div>
+
+          <!-- Remaining / Cache / Turns summary strip -->
+          <div class="ctx-sub-strip">
+            <span><strong id="s-ctx-remain">0</strong> <span data-i18n="session.free">free</span></span>
+            <span class="sep">·</span>
+            <span><strong id="s-cache-rate">0%</strong> <span data-i18n="session.cached">cached</span></span>
+            <span class="sep">·</span>
+            <span id="s-turns-steps">0 turns</span>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Expandable Breakdown Controls -->
+          <div class="breakdown-head">
+            <span class="breakdown-title" data-i18n="session.composition">Context Breakdown</span>
+            <div class="breakdown-tools">
+              <button type="button" id="btn-toggle-all" class="link-btn" data-i18n="action.expandAll">Expand all</button>
+            </div>
+          </div>
+
+          <!-- Single-row-per-category expandable list -->
+          <div id="s-breakdown-list" class="breakdown-list"></div>
+        </section>
+
+        <!-- Compact 4-Metric Telemetry Strip -->
+        <section class="telemetry-strip card">
+          <div class="tele-cell">
+            <div class="tele-label" data-i18n="kpi.totalTokens">Total Tokens</div>
+            <div id="s-total-tokens" class="tele-val">0</div>
+            <div id="s-total-io" class="tele-sub"></div>
+          </div>
+          <div class="tele-cell">
+            <div class="tele-label" data-i18n="kpi.cacheRead">Cache Read</div>
+            <div id="s-cache-read" class="tele-val">0</div>
+            <div id="s-cache-sub" class="tele-sub"></div>
+          </div>
+          <div class="tele-cell">
+            <div class="tele-label" data-i18n="kpi.output">Output</div>
+            <div id="s-output-tokens" class="tele-val">0</div>
+            <div id="s-calls" class="tele-sub"></div>
+          </div>
+          <div class="tele-cell">
+            <div class="tele-label" data-i18n="kpi.activeTime">Active Time</div>
+            <div id="s-duration" class="tele-val">0s</div>
+            <div id="s-speed" class="tele-sub">0 tok/s</div>
+          </div>
+        </section>
+
+        <!-- Per-Model Usage Card (Session) -->
+        <section id="s-models-card" class="card section-card">
+          <div class="card-head">
+            <h2 class="card-title" data-i18n="models.title">Models</h2>
+            <span id="s-models-meta" class="card-meta"></span>
+          </div>
+          <div id="s-models-bar" class="ctx-bar thin hidden"></div>
+          <div id="s-models-list" class="models-list"></div>
+        </section>
+
+        <!-- Hook Execution & Turn Telemetry Card (auto-shown when hook data exists) -->
+        <section id="s-hooks-card" class="card section-card hidden">
+          <div class="card-head">
+            <h2 class="card-title" data-i18n="hooks.title">Turn Execution</h2>
+            <span id="s-hooks-meta" class="card-meta"></span>
+          </div>
+          <div id="s-hooks-stats" class="hooks-stat-grid"></div>
+          <div id="s-hooks-reasons" class="hooks-reasons"></div>
+        </section>
+
+        <!-- Interactive Context Trend Card -->
+        <section class="card section-card">
+          <div class="card-head">
+            <div class="head-left">
+              <h2 class="card-title" data-i18n="session.trend">Context Trend</h2>
+              <span id="s-timeline-meta" class="card-meta"></span>
+            </div>
+            <div class="head-right">
+              <div class="mini-switch">
+                <button type="button" class="mini-sw-btn active" data-trend-mode="stacked" data-i18n="trend.stacked">Stacked</button>
+                <button type="button" class="mini-sw-btn" data-trend-mode="line" data-i18n="trend.line">Curve</button>
+              </div>
+              <div class="mini-switch">
+                <button type="button" class="mini-sw-btn active" data-trend-span="24">24</button>
+                <button type="button" class="mini-sw-btn" data-trend-span="all" data-i18n="range.all">All</button>
+              </div>
+            </div>
+          </div>
+          <div id="s-timeline-chart" class="chart-box"></div>
+        </section>
+
+        <!-- Recent Trace Card (latest live trace events, newest first) -->
+        <section class="card section-card">
+          <div class="card-head">
+            <h2 class="card-title" data-i18n="session.recentTrace">Recent Trace</h2>
+            <span id="s-recent-trace-meta" class="card-meta"></span>
+          </div>
+          <div id="s-recent-trace" class="recent-trace-list"></div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ================================================================
+         TAB 2: SESSION TRACE (Full interaction & tool call history)
+         ================================================================ -->
+    <main id="view-trace" class="view view-trace" role="tabpanel" aria-labelledby="tab-trace">
+      <div class="trace-toolbar">
+        <div id="trace-tags" class="trace-tags" role="group" aria-label="Toggle event types"></div>
+        <input id="trace-search" type="search" class="trace-search" data-i18n-placeholder="trace.search" placeholder="Search tool, args, result…" autocomplete="off">
+      </div>
+
+      <!-- 3-Track Mini Timeline Strip -->
+      <div id="trace-strip" class="card trace-strip hidden"></div>
+
+      <!-- Master-Detail Split -->
+      <div id="trace-split" class="trace-split">
+        <div class="trace-list-wrap">
+          <div id="trace-list" class="card trace-list"></div>
+          <button type="button" id="btn-trace-latest" class="jump-latest-btn hidden">
+            ↓ <span data-i18n="trace.latest">Latest</span>
+          </button>
+        </div>
+        <aside id="trace-detail" class="card trace-detail hidden">
+          <div class="td-head">
+            <div class="td-title-wrap">
+              <span id="td-kind-badge" class="tag-pill"></span>
+              <span id="td-step-label" class="td-step"></span>
+            </div>
+            <button type="button" id="btn-close-detail" class="icon-btn" aria-label="Close">
+              <svg class="icon" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+            </button>
+          </div>
+          <nav id="td-tabs" class="td-tabs" role="tablist"></nav>
+          <div id="td-body" class="td-body"></div>
+        </aside>
+      </div>
+    </main>
+
+    <!-- ================================================================
+         TAB 3 / 4: PROJECT & GLOBAL OVERVIEW
+         ================================================================ -->
+    <main id="view-overview" class="view" role="tabpanel" aria-labelledby="tab-overview">
+      <div class="ov-toolbar">
+        <div class="ov-toolbar-left">
+          <span id="ov-project-pill" class="project-pill hidden"></span>
+          <button type="button" id="ov-date-badge" class="date-badge" data-i18n-title="ov.clearDate" title="Click to clear date filter">
+            <span id="ov-date-range">—</span>
+          </button>
+        </div>
+        <div class="range-pills" role="group">
+          <button type="button" class="range-pill" data-range="today" data-i18n="range.today">Today</button>
+          <button type="button" class="range-pill" data-range="7d" data-i18n="range.7d">7d</button>
+          <button type="button" class="range-pill active" data-range="30d" data-i18n="range.30d">30d</button>
+          <button type="button" class="range-pill" data-range="all" data-i18n="range.all">All</button>
+        </div>
+      </div>
+
+      <!-- Row 1: Compact 6 KPIs + 7-Day Usage Chart -->
+      <section class="ov-top-grid">
+        <div class="kpi-6-grid">
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.sessions">Sessions</div>
+            <div id="ov-kpi-sessions" class="kpi-value">0</div>
+            <div id="ov-kpi-sessions-sub" class="kpi-sub"></div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.tokens">Tokens</div>
+            <div id="ov-kpi-tokens" class="kpi-value">0</div>
+            <div id="ov-kpi-tokens-sub" class="kpi-sub"></div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.output">Output</div>
+            <div id="ov-kpi-output" class="kpi-value">0</div>
+            <div id="ov-kpi-output-sub" class="kpi-sub"></div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.cache">Cache Hit</div>
+            <div id="ov-kpi-cache" class="kpi-value">0%</div>
+            <div id="ov-kpi-cache-sub" class="kpi-sub"></div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.tools">Tool Calls</div>
+            <div id="ov-kpi-tools" class="kpi-value">0</div>
+            <div id="ov-kpi-tools-sub" class="kpi-sub"></div>
+          </div>
+          <div class="card kpi-card">
+            <div class="kpi-label" data-i18n="ov.duration">Active Time</div>
+            <div id="ov-kpi-duration" class="kpi-value">0s</div>
+            <div id="ov-kpi-duration-sub" class="kpi-sub"></div>
+          </div>
+        </div>
+
+        <div class="card daily-card">
+          <div class="card-head">
+            <h3 id="ov-usage-title" class="card-title" data-i18n="ov.daily">Usage</h3>
+            <div class="chart-legend">
+              <span class="leg-item"><i class="dot" style="background:var(--blue)"></i><span data-i18n="legend.cached">Cached</span></span>
+              <span class="leg-item"><i class="dot" style="background:var(--cyan)"></i><span data-i18n="legend.uncached">New In + Out</span></span>
+            </div>
+          </div>
+          <div id="ov-daily-chart" class="daily-chart-box"></div>
+        </div>
+      </section>
+
+      <!-- Row 2: Token Composition + Timing Breakdown -->
+      <section class="ov-mid-grid">
+        <div class="card section-card">
+          <div class="card-head">
+            <h3 class="card-title" data-i18n="ov.tokenStats">Token Breakdown</h3>
+            <span id="ov-token-total-meta" class="card-meta"></span>
+          </div>
+          <div id="ov-token-bar" class="ctx-bar thin"></div>
+          <div id="ov-token-legend" class="comp-grid compact"></div>
+        </div>
+
+        <div class="card section-card">
+          <div class="card-head">
+            <h3 class="card-title" data-i18n="ov.timingStats">Time Breakdown</h3>
+            <span id="ov-output-speed" class="card-meta"></span>
+          </div>
+          <div id="ov-timing-bar" class="ctx-bar thin"></div>
+          <div id="ov-timing-legend" class="comp-grid compact"></div>
+        </div>
+      </section>
+
+      <!-- Per-Model Usage Card (Project / Global) -->
+      <section class="card section-card ov-models-card">
+        <div class="card-head">
+          <h3 class="card-title" data-i18n="models.title">Models</h3>
+          <span id="ov-models-meta" class="card-meta"></span>
+        </div>
+        <div id="ov-models-bar" class="ctx-bar thin hidden"></div>
+        <div id="ov-models-list" class="models-list"></div>
+      </section>
+
+      <!-- Hook Execution & Turn Outcomes Card (Project / Global, auto-shown when hook data exists) -->
+      <section id="ov-hooks-card" class="card section-card ov-models-card hidden">
+        <div class="card-head">
+          <h3 class="card-title" data-i18n="hooks.title">Turn Execution</h3>
+          <span id="ov-hooks-meta" class="card-meta"></span>
+        </div>
+        <div id="ov-hooks-stats" class="hooks-stat-grid"></div>
+        <div id="ov-hooks-reasons" class="hooks-reasons"></div>
+      </section>
+
+      <!-- Row 3: Activity Heatmap + Skills + Tools + Commands -->
+      <section class="ov-quad-grid">
+        <div class="card section-card">
+          <div class="card-head">
+            <div class="head-left">
+              <h3 class="card-title" data-i18n="ov.activity">Activity</h3>
+              <span id="ov-heatmap-meta" class="card-meta"></span>
+            </div>
+            <div class="mini-switch">
+              <button type="button" class="mini-sw-btn" data-hm="sessions" data-i18n="ov.sessions">Sessions</button>
+              <button type="button" class="mini-sw-btn active" data-hm="tokens" data-i18n="ov.tokens">Tokens</button>
+            </div>
+          </div>
+          <div id="ov-heatmap" class="heatmap-wrap"></div>
+          <div class="heatmap-foot">
+            <span class="heatmap-hint" data-i18n="ov.clickDate">Click day to filter</span>
+            <div class="heatmap-scale">
+              <span data-i18n="ov.less">Less</span>
+              <i class="hm-cell lv-0"></i>
+              <i class="hm-cell lv-1"></i>
+              <i class="hm-cell lv-2"></i>
+              <i class="hm-cell lv-3"></i>
+              <i class="hm-cell lv-4"></i>
+              <span data-i18n="ov.more">More</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card section-card">
+          <div class="card-head">
+            <h3 class="card-title" data-i18n="ov.skills">Skills</h3>
+            <div class="mini-switch">
+              <button type="button" class="mini-sw-btn active" data-skill-sort="count" data-i18n="sort.count">Count</button>
+              <button type="button" class="mini-sw-btn" data-skill-sort="recent" data-i18n="sort.recent">Recent</button>
+            </div>
+          </div>
+          <div id="ov-skills-sub" class="sub-stat"></div>
+          <input id="ov-skill-search" type="search" class="inline-search" data-i18n-placeholder="ov.searchSkills" placeholder="Filter skills…" autocomplete="off">
+          <div id="ov-skills-list" class="bar-list"></div>
+        </div>
+
+        <div class="card section-card">
+          <div class="card-head">
+            <h3 class="card-title" data-i18n="ov.toolUsage">Tools</h3>
+            <span id="ov-tools-sub" class="card-meta"></span>
+          </div>
+          <div id="ov-tools-list" class="bar-list"></div>
+        </div>
+
+        <div class="card section-card">
+          <div class="card-head">
+            <h3 class="card-title" data-i18n="ov.cmdUsage">Commands</h3>
+            <span id="ov-cmds-sub" class="card-meta"></span>
+          </div>
+          <div id="ov-cmds-list" class="bar-list"></div>
+        </div>
+      </section>
+
+      <!-- Row 4: Sessions List -->
+      <section class="sessions-section">
+        <div class="sessions-toolbar">
+          <div class="sessions-title-wrap">
+            <h3 class="sessions-heading" data-i18n="ov.sessions">Sessions</h3>
+            <span id="ov-sessions-count" class="count-pill">0</span>
+          </div>
+          <input id="ov-session-search" type="search" class="session-search" data-i18n-placeholder="ov.searchSessions" placeholder="Search title, workspace, message…" autocomplete="off">
+          <div class="sort-pills">
+            <button type="button" class="sort-pill active" data-sort="recent" data-i18n="sort.recent">Recent</button>
+            <button type="button" class="sort-pill" data-sort="tokens" data-i18n="sort.tokens">Tokens</button>
+            <button type="button" class="sort-pill" data-sort="context" data-i18n="sort.context">Context</button>
+          </div>
+        </div>
+        <div id="ov-ws-chips" class="ws-chips"></div>
+        <div id="ov-sessions-grid" class="sessions-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel card">
+      <div class="modal-head">
+        <h2 id="settings-title" class="modal-title" data-i18n="settings.title">Settings</h2>
+        <button type="button" class="icon-btn" data-close-modal aria-label="Close">
+          <svg class="icon" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label for="set-lang" data-i18n="settings.lang">Language</label>
+          <select id="set-lang">
+            <option value="en">English</option>
+            <option value="zh">简体中文</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="set-poll" data-i18n="settings.poll">Refresh Interval</label>
+          <select id="set-poll">
+            <option value="1500">1.5s</option>
+            <option value="3000">3s</option>
+            <option value="5000">5s</option>
+            <option value="10000">10s</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="set-default-tab" data-i18n="settings.defaultTab">Default View</label>
+          <select id="set-default-tab">
+            <option value="session" data-i18n="tab.session">Session</option>
+            <option value="project" data-i18n="tab.project">Project</option>
+            <option value="global" data-i18n="tab.global">Global</option>
+          </select>
+        </div>
+        <div class="update-box">
+          <div class="update-row">
+            <span id="set-version-label" class="update-ver">v1.0.0</span>
+            <button type="button" id="btn-check-update" class="ghost-btn xs" data-i18n="settings.checkUpdate">Check updates</button>
+          </div>
+          <div id="set-update-status" class="update-status hidden"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn sm" data-close-modal data-i18n="action.cancel">Cancel</button>
+        <button type="button" id="btn-save-settings" class="primary-btn sm" data-i18n="action.save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip" class="tooltip hidden" role="tooltip"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

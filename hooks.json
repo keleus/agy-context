@@ -1,0 +1,44 @@
+{
+  "agy-context-timing": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/record_timing.py",
+        "timeout": 3
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/record_timing.py",
+        "timeout": 3
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/record_timing.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/record_timing.py",
+        "timeout": 3
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/record_timing.py",
+        "timeout": 3
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "agy-context",
+  "displayName": "AGY Context",
+  "description": "Real-time session context monitor, full interaction trace inspector, and project/global token analytics docked in Antigravity's right auxiliary pane.",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "homepage": "https://github.com/keleus/agy-context",
+  "repository": "https://github.com/keleus/agy-context",
+  "suggestedPrompts": [
+    "Open the AGY Context side pane to inspect current session usage",
+    "Analyze which files or tools are consuming the most context in this session",
+    "Summarize my token usage and cache hit rate over the last 7 days"
+  ]
+}
