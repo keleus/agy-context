@@ -14,7 +14,7 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process';
-import { cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -1319,6 +1319,57 @@ async function runSelfUpdate() {
 }
 
 // ---------------------------------------------------------------------------
+// Persistent user settings stored in plugin_data/agy-context/settings.json
+// (survives sidecar disable/enable, port reassignment, restarts & updates)
+// ---------------------------------------------------------------------------
+
+function resolveSettingsPath() {
+  if (process.env.PLUGIN_DATA) {
+    return join(process.env.PLUGIN_DATA, 'settings.json');
+  }
+  const appDirs = findAppDataDirs();
+  const baseAppData = appDirs[0] || join(homedir(), '.gemini', 'antigravity');
+  return join(baseAppData, 'plugin_data', 'agy-context', 'settings.json');
+}
+
+function handleGetSettings() {
+  const filePath = resolveSettingsPath();
+  if (!existsSync(filePath)) {
+    return { found: false, path: filePath, settings: null };
+  }
+  try {
+    const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
+    if (raw && typeof raw === 'object') {
+      return { found: true, path: filePath, settings: raw };
+    }
+  } catch { /* ignore corrupted file */ }
+  return { found: false, path: filePath, settings: null };
+}
+
+function handleSaveSettings(data) {
+  const filePath = resolveSettingsPath();
+  let obj = data;
+  if (typeof obj === 'string') {
+    try { obj = JSON.parse(obj); } catch { obj = null; }
+  }
+  const payload = obj && typeof obj === 'object' && obj.settings && typeof obj.settings === 'object'
+    ? obj.settings
+    : (obj && typeof obj === 'object' ? obj : null);
+  if (!payload) {
+    return { ok: false, error: 'invalid_settings' };
+  }
+  try {
+    mkdirSync(dirname(filePath), { recursive: true });
+    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+    writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
+    renameSync(tmpPath, filePath);
+    return { ok: true, path: filePath, settings: payload };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Server bootstrap (only when executed directly, not when imported by tests)
 // ---------------------------------------------------------------------------
 
@@ -1353,6 +1404,8 @@ if (isEntrypoint) {
     app.api('/api/trace-detail', (data) => handleTraceDetail(data, app.config?.conversationId), 'GET');
     app.api('/api/overview', (data) => handleOverview(data), 'GET');
     app.api('/api/version', async (data) => handleVersion(data), 'GET');
+    app.api('/api/settings', () => handleGetSettings(), 'GET');
+    app.api('/api/settings/save', (data) => handleSaveSettings(data), 'POST');
     app.api('/api/update/start', () => handleStartUpdate(), 'POST');
     app.api('/api/update/status', () => getUpdateStatus(), 'GET');
 
@@ -1411,6 +1464,21 @@ if (isEntrypoint) {
           const out = await handleVersion(data);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(out));
+          return;
+        }
+        if (pathname === '/api/settings' && req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(handleGetSettings()));
+          return;
+        }
+        if (pathname === '/api/settings/save' && req.method === 'POST') {
+          const chunks = [];
+          for await (const ch of req) chunks.push(ch);
+          const bodyStr = Buffer.concat(chunks).toString('utf-8');
+          let parsedBody = null;
+          try { parsedBody = JSON.parse(bodyStr || '{}'); } catch { parsedBody = null; }
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(handleSaveSettings(parsedBody)));
           return;
         }
         if (pathname === '/api/update/start' && req.method === 'POST') {

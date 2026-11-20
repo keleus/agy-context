@@ -89,6 +89,26 @@ export function estimateMediaTokens(media) {
   return total;
 }
 
+function splitMediaByType(media) {
+  let imageW = 0;
+  let imageCount = 0;
+  let fileW = 0;
+  let fileCount = 0;
+  if (Array.isArray(media)) {
+    for (const m of media) {
+      const mime = String(m?.mime_type || '').toLowerCase();
+      if (mime.startsWith('image/')) {
+        imageW += 258;
+        imageCount += 1;
+      } else {
+        fileW += mime.includes('pdf') ? 800 : 512;
+        fileCount += 1;
+      }
+    }
+  }
+  return { imageW, imageCount, fileW, fileCount };
+}
+
 export function splitUserInput(raw) {
   const text = String(raw || '');
   const reqMatches = [...text.matchAll(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/gi)];
@@ -646,6 +666,8 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
   let otherMs = 0;
   let totalTimedOutput = 0;
   let totalTimedModelMs = 0;
+  let maxTokPerSec = 0;
+  let maxTokPerSecAny = 0;
   const MAX_ACTIVE_GAP_MS = 120_000;
 
   const ensureDateBucket = (dateKey) => {
@@ -686,6 +708,8 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         thinking: 0,
         reply: 0,
         calls: 0,
+        postCompactTimedOut: 0,
+        postCompactTimedMs: 0,
         items: [],
       };
     }
@@ -932,19 +956,43 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         const stMs = parseMs(st.created_at);
         if (st.type === 'USER_INPUT') {
           const { userText, injectedText } = splitUserInput(st.content);
-          const uW = estimateTokens(userText) + estimateMediaTokens(st.media);
+          const textW = estimateTokens(userText);
+          const { imageW, imageCount, fileW, fileCount } = splitMediaByType(st.media);
+          const uW = textW + imageW + fileW;
           const iW = estimateTokens(injectedText);
           userEst += uW;
           injectedEst += iW;
-          if (uW > 0) {
+          if (textW > 0) {
             initUserItems.push({
-              label: userText.replace(/\s+/g, ' ').slice(0, 64) || 'User message',
-              detail: userText.slice(0, 240),
-              weight: uW,
+              group: 'text',
+              label: 'Text input',
+              weight: textW,
+              itemCount: 1,
               step: st.step_index ?? j,
               at: st.created_at || '',
               ms: Number.isFinite(stMs) ? stMs : safePMs,
-              mediaCount: Array.isArray(st.media) ? st.media.length : 0,
+            });
+          }
+          if (imageW > 0) {
+            initUserItems.push({
+              group: 'image',
+              label: 'Image input',
+              weight: imageW,
+              itemCount: imageCount,
+              step: st.step_index ?? j,
+              at: st.created_at || '',
+              ms: Number.isFinite(stMs) ? stMs : safePMs,
+            });
+          }
+          if (fileW > 0) {
+            initUserItems.push({
+              group: 'file',
+              label: 'File / Media',
+              weight: fileW,
+              itemCount: fileCount,
+              step: st.step_index ?? j,
+              at: st.created_at || '',
+              ms: Number.isFinite(stMs) ? stMs : safePMs,
             });
           }
           if (iW > 0) {
@@ -1046,11 +1094,13 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         if (k === 'system_prompt' || k === 'tool_definitions') continue;
         currentBuckets[k] = scaledHistory[k];
       }
-      // Scale modelContext proportionally too so totals stay aligned
+      // Scale modelContext proportionally & reset post-compaction speed window
       for (const mKey of Object.keys(modelContext)) {
         modelContext[mKey].thinking = Math.round(modelContext[mKey].thinking * scaleRatio);
         modelContext[mKey].reply = Math.round(modelContext[mKey].reply * scaleRatio);
         modelContext[mKey].total = modelContext[mKey].thinking + modelContext[mKey].reply;
+        modelContext[mKey].postCompactTimedOut = 0;
+        modelContext[mKey].postCompactTimedMs = 0;
       }
     } else if (delta > 0) {
       const weights = emptyBuckets();
@@ -1070,21 +1120,49 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         const safeStMs = Number.isFinite(stMs) ? stMs : safePMs;
         if (st.type === 'USER_INPUT') {
           const { userText, injectedText } = splitUserInput(st.content);
-          const uW = estimateTokens(userText) + estimateMediaTokens(st.media);
+          const textW = estimateTokens(userText);
+          const { imageW, imageCount, fileW, fileCount } = splitMediaByType(st.media);
+          const uW = textW + imageW + fileW;
           const injW = estimateTokens(injectedText);
           weights.user_messages += uW;
           weights.injected_content += injW;
-          if (uW > 0) {
+          if (textW > 0) {
             stepItems.push({
-              label: userText.replace(/\s+/g, ' ').slice(0, 64) || 'Attachment',
-              detail: userText.slice(0, 240),
+              group: 'text',
+              label: 'Text input',
               category: 'user_messages',
               tool: 'user',
-              weight: uW,
+              weight: textW,
+              itemCount: 1,
               step: st.step_index ?? j,
               at: st.created_at || '',
               ms: safeStMs,
-              mediaCount: Array.isArray(st.media) ? st.media.length : 0,
+            });
+          }
+          if (imageW > 0) {
+            stepItems.push({
+              group: 'image',
+              label: 'Image input',
+              category: 'user_messages',
+              tool: 'user',
+              weight: imageW,
+              itemCount: imageCount,
+              step: st.step_index ?? j,
+              at: st.created_at || '',
+              ms: safeStMs,
+            });
+          }
+          if (fileW > 0) {
+            stepItems.push({
+              group: 'file',
+              label: 'File / Media',
+              category: 'user_messages',
+              tool: 'user',
+              weight: fileW,
+              itemCount: fileCount,
+              step: st.step_index ?? j,
+              at: st.created_at || '',
+              ms: safeStMs,
             });
           }
           if (injW > 0) {
@@ -1200,6 +1278,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
               detail: item.detail,
               tool: item.tool,
               tokens: tok,
+              itemCount: item.itemCount || 1,
               step: item.step,
               at: item.at,
               ms: item.ms,
@@ -1236,16 +1315,20 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     }
 
     // --- Timing estimation ---
-    // Only measure exact model latency when the immediately following step is a
-    // system/tool step (e.g. GENERIC tool execution), OR when our lifecycle hook
-    // recorded exact PreInvocation -> PostInvocation/Stop timing for final replies.
+    // Antigravity streams parallel tool calls incrementally, setting each GENERIC
+    // step's created_at when the model finishes emitting that tool call. So the
+    // model's true generation end time is the LAST child GENERIC's created_at
+    // (not the first, which would prematurely cut off multi-tool streams).
     const firstChildIdx = pIdx + 1 < nextPIdx ? pIdx + 1 : -1;
     const lastChildIdx = nextPIdx - 1 > pIdx ? nextPIdx - 1 : -1;
-    const hasMeasuredEnd = firstChildIdx >= 0 && steps[firstChildIdx].type !== 'USER_INPUT';
+    const lastGenericStep = childGenerics.length ? childGenerics[childGenerics.length - 1] : null;
+    const hasMeasuredEnd = Boolean(lastGenericStep)
+      || (firstChildIdx >= 0 && steps[firstChildIdx].type !== 'USER_INPUT');
 
     let callModelMs = 0;
     if (hasMeasuredEnd) {
-      const childMs = parseMs(steps[firstChildIdx].created_at);
+      const endRefStep = lastGenericStep || steps[firstChildIdx];
+      const childMs = parseMs(endRefStep.created_at);
       if (Number.isFinite(pMs) && Number.isFinite(childMs) && childMs >= pMs) {
         callModelMs = Math.min(MAX_ACTIVE_GAP_MS, childMs - pMs);
       }
@@ -1259,8 +1342,17 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       modelsUsed[model].durationMs += callModelMs;
       modelsUsed[model].timedDurationMs += callModelMs;
       modelsUsed[model].timedOutputTokens += outTok;
+      mc.postCompactTimedOut += outTok;
+      mc.postCompactTimedMs += callModelMs;
       totalTimedModelMs += callModelMs;
       totalTimedOutput += outTok;
+      if (outTok > 0) {
+        const callRate = Math.round((outTok / (callModelMs / 1000)) * 10) / 10;
+        if (callRate > maxTokPerSecAny) maxTokPerSecAny = callRate;
+        if (callModelMs >= 200 && outTok >= 10 && callRate > maxTokPerSec) {
+          maxTokPerSec = callRate;
+        }
+      }
     }
 
     const breakdownModelMs = callModelMs > 0
@@ -1285,7 +1377,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     }
 
     if (firstChildIdx >= 0 && tcs.length > 0 && nextPIdx < steps.length) {
-      const startToolMs = parseMs(steps[firstChildIdx].created_at);
+      const startToolMs = parseMs((lastGenericStep || steps[firstChildIdx]).created_at);
       let endToolMs = parseMs(steps[nextPIdx].created_at);
       for (let j = firstChildIdx; j < nextPIdx; j++) {
         if (steps[j].type === 'USER_INPUT') {
@@ -1440,6 +1532,34 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     categoryItems.tool_calls = merged;
   }
 
+  // Merge user_messages by input type (text, image, file) normalized to currentBuckets.user_messages
+  if (categoryItems.user_messages.length > 0) {
+    const grouped = new Map();
+    let rawSum = 0;
+    for (const it of categoryItems.user_messages) {
+      const g = it.group || 'text';
+      const tok = Math.max(0, it.tokens || 0);
+      rawSum += tok;
+      if (!grouped.has(g)) {
+        grouped.set(g, { group: g, label: it.label || g, count: 0, rawTokens: 0 });
+      }
+      const rec = grouped.get(g);
+      rec.count += Math.max(1, Number(it.itemCount) || 1);
+      rec.rawTokens += tok;
+    }
+    const targetUser = currentBuckets.user_messages || rawSum;
+    const merged = [...grouped.values()].map((rec) => ({
+      group: rec.group,
+      label: rec.label,
+      count: rec.count,
+      tokens: rawSum > 0 ? Math.max(1, Math.round((rec.rawTokens / rawSum) * targetUser)) : 0,
+      tool: 'user',
+      step: 0,
+    }));
+    merged.sort((a, b) => b.tokens - a.tokens);
+    categoryItems.user_messages = merged;
+  }
+
   // Merge injected_content into clean grouped buckets (time, image, compaction, settings, other)
   // normalized proportionally to currentBuckets.injected_content so sums stay aligned after compaction.
   if (categoryItems.injected_content.length > 0) {
@@ -1512,14 +1632,15 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     const totalAll = totalIn + mu.outputTokens;
     const tMs = mu.timedDurationMs || 0;
     const tOut = mu.timedOutputTokens || 0;
+    // Strictly current-window breakdown matching mc.total (mc.thinking + mc.reply)
     const typeBreakdown = [
-      { type: 'cache_read', tokens: mu.cacheReadTokens, rate: totalIn > 0 ? mu.cacheReadTokens / totalIn : 0 },
-      { type: 'text_input', tokens: mu.textInputTokens },
-      { type: 'image_input', tokens: mu.imageInputTokens, count: mu.imageCount },
-      { type: 'thinking', tokens: mu.outThinkingTokens },
-      { type: 'tool_call', tokens: mu.outToolCallTokens, count: mu.toolCallCount },
-      { type: 'reply', tokens: mu.outReplyTokens },
+      { type: 'thinking', tokens: mc.thinking },
+      { type: 'reply', tokens: mc.reply },
     ].filter((x) => x.tokens > 0);
+    const avgTokPerSec = tMs > 0 ? Math.round((tOut / (tMs / 1000)) * 10) / 10 : 0;
+    const postCompactTokPerSec = mc.postCompactTimedMs > 0
+      ? Math.round((mc.postCompactTimedOut / (mc.postCompactTimedMs / 1000)) * 10) / 10
+      : avgTokPerSec;
     return {
       ...mc,
       inputTokens: mu.inputTokens,
@@ -1528,7 +1649,8 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       totalTokens: totalAll,
       cacheHitRate: totalIn > 0 ? mu.cacheReadTokens / totalIn : 0,
       durationMs: mu.durationMs,
-      tokPerSec: tMs > 0 ? Math.round((tOut / (tMs / 1000)) * 10) / 10 : 0,
+      tokPerSec: avgTokPerSec,
+      postCompactTokPerSec,
       typeBreakdown,
     };
   }).sort((a, b) => b.total - a.total);
@@ -1541,6 +1663,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
   const outputTokPerSec = totalTimedModelMs > 0
     ? Math.round((totalTimedOutput / (totalTimedModelMs / 1000)) * 10) / 10
     : 0;
+  const resolvedMaxTokPerSec = Math.max(outputTokPerSec, maxTokPerSec || maxTokPerSecAny || 0);
 
   const totalPromptAll = totalInput + totalCacheRead;
   const cacheHitRate = totalPromptAll > 0 ? totalCacheRead / totalPromptAll : 0;
@@ -1595,6 +1718,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       toolExecMs,
       otherMs,
       outputTokPerSec,
+      maxTokPerSec: resolvedMaxTokPerSec,
     },
     timeline,
     compactions,
@@ -1838,7 +1962,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
 
       const nextStep = i + 1 < steps.length ? steps[i + 1] : null;
       let nextMs = childGenerics.length
-        ? parseMs(childGenerics[0].stepObj.created_at)
+        ? parseMs(childGenerics[childGenerics.length - 1].stepObj.created_at)
         : (nextStep && nextStep.type !== 'USER_INPUT' ? parseMs(nextStep.created_at) : NaN);
       let modelDurMs = 0;
       let timingSource = '';

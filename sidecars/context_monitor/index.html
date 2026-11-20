@@ -23,6 +23,7 @@
         </div>
       </div>
       <div class="topbar-right">
+        <span id="topbar-speed" class="topbar-speed hidden"></span>
         <button type="button" id="btn-update-pill" class="update-pill hidden" title="Update available">
           <svg class="update-pill-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 12.5V3.5M4.5 7L8 3.5 11.5 7"/></svg>
           <span id="btn-update-text" data-i18n="update.btn">Update</span>
@@ -161,6 +162,16 @@
           <div id="s-models-list" class="models-list"></div>
         </section>
 
+        <!-- Cumulative Token Breakdown Card (Session) -->
+        <section id="s-token-card" class="card section-card" data-card-id="tokens">
+          <div class="card-head">
+            <h2 class="card-title" data-i18n="ov.tokenStats">Token Breakdown</h2>
+            <span id="s-token-total-meta" class="card-meta"></span>
+          </div>
+          <div id="s-token-bar" class="ctx-bar thin"></div>
+          <div id="s-token-legend" class="comp-grid compact"></div>
+        </section>
+
         <!-- Time Breakdown Card (Session) -->
         <section id="s-timing-card" class="card section-card" data-card-id="timing">
           <div class="card-head">
@@ -234,9 +245,11 @@
          TAB 3 / 4: PROJECT & GLOBAL OVERVIEW
          ================================================================ -->
     <main id="view-overview" class="view" role="tabpanel" aria-labelledby="tab-overview">
+      <div id="ov-project-row" class="ov-project-row hidden">
+        <span id="ov-project-pill" class="project-pill"></span>
+      </div>
       <div class="ov-toolbar">
         <div class="ov-toolbar-left">
-          <span id="ov-project-pill" class="project-pill hidden"></span>
           <div id="ov-date-picker" class="date-range-picker">
             <input type="date" id="ov-date-start" class="date-input" aria-label="Start date">
             <span class="date-sep">→</span>

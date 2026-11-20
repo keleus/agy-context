@@ -150,6 +150,21 @@ button { cursor: pointer; }
 .topbar-left { flex: 1 1 auto; }
 .topbar-right { flex: none; }
 
+.topbar-speed {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: var(--field);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .seg-tabs {
   display: inline-flex;
   padding: 2px;
@@ -1238,6 +1253,7 @@ button { cursor: pointer; }
 .tag-write { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .tag-ok { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .tag-err { color: var(--rose); background: color-mix(in srgb, var(--rose) 14%, transparent); }
+.tag-neutral { color: var(--slate-ink); background: color-mix(in srgb, var(--slate-ink) 14%, transparent); }
 
 /* ---------- Mini Switch / Pills ---------- */
 .mini-switch, .range-pills, .sort-pills {
@@ -1451,6 +1467,31 @@ button { cursor: pointer; }
 .ts-cell.on-model { background: var(--violet); }
 .ts-cell.on-tool { background: var(--amber); }
 .ts-cell.on-error { background: var(--rose); }
+.ts-cell.on-compaction {
+  position: relative;
+  background: transparent;
+  border-radius: 0;
+}
+.ts-cell.on-compaction::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  transform: translateX(-50%);
+  border-left: 1.5px dashed var(--slate-ink);
+  opacity: 0.9;
+}
+.ts-cell.on-compaction:hover::after,
+.ts-cell.on-compaction.selected::after {
+  border-left-color: var(--fg);
+  opacity: 1;
+}
+.ts-cell.on-compaction.selected {
+  outline: none;
+  background: color-mix(in srgb, var(--slate-ink) 16%, transparent);
+  border-radius: 2px;
+}
 .ts-cell.selected { outline: 1.5px solid var(--fg); outline-offset: 1px; }
 
 .trace-split {
@@ -1560,6 +1601,7 @@ button { cursor: pointer; }
 .tr-dot.tool { background: var(--amber); }
 .tr-dot.skill { background: var(--pink); }
 .tr-dot.system { background: var(--blue); }
+.tr-dot.compaction { background: var(--slate-ink); }
 .tr-dot.error { background: var(--rose); }
 
 .tr-name {
@@ -1632,8 +1674,8 @@ button { cursor: pointer; }
 }
 
 .tr-think-badge.badge-compaction {
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  color: var(--slate-ink);
+  background: color-mix(in srgb, var(--slate-ink) 14%, transparent);
 }
 
 .tr-think-badge.badge-settings {
@@ -1649,6 +1691,28 @@ button { cursor: pointer; }
 
 .tr-row.generating .tr-dot.model {
   animation: agy-pulse 1.2s ease-in-out infinite;
+}
+
+.trace-load-more {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 1px dashed var(--border);
+  background: var(--field);
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, color 0.12s;
+}
+
+.trace-load-more:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .tr-think-badge.badge-generating {
@@ -2005,19 +2069,25 @@ button { cursor: pointer; }
   gap: 6px;
 }
 
+.ov-project-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
 .project-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2.5px 8px;
+  padding: 3px 9px;
   border-radius: var(--r-sm);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 600;
   font-family: var(--mono);
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 11%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
-  max-width: 180px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2550,27 +2620,34 @@ button { cursor: pointer; }
 
 .layout-editor-tabs {
   display: inline-flex;
+  align-self: flex-start;
   background: var(--field);
   border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   padding: 2px;
   gap: 2px;
   margin-bottom: 8px;
 }
 
 .layout-tab-btn {
+  border: 0;
+  background: transparent;
   padding: 3px 10px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
   color: var(--fg-muted);
+  white-space: nowrap;
   transition: background 0.12s, color 0.12s;
 }
+
+.layout-tab-btn:hover { color: var(--fg); }
 
 .layout-tab-btn.active {
   background: var(--card);
   color: var(--fg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .layout-editor-list {

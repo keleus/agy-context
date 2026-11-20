@@ -27,6 +27,8 @@
       'trace.model': 'Model',
       'trace.tool': 'Tool',
       'trace.system': 'Injected',
+      'trace.compaction': 'Context compaction',
+      'trace.compactionTag': 'Compaction',
       'trace.error': 'Error',
       'inj.time': 'Time',
       'inj.image': 'Image',
@@ -37,6 +39,7 @@
       'trace.follow': 'Follow',
       'trace.followTip': 'Auto-scroll to latest events',
       'trace.latest': 'Latest',
+      'trace.loadMore': 'Load earlier (+{step}) · {n} hidden',
       'trace.search': 'Search tool, args, result…',
       'trace.empty': 'No matching trace events',
       'trace.toolOnly': '(tool calls only)',
@@ -221,15 +224,17 @@
       'hm.weeks': '{n}w',
       'model.thinking': 'Thinking',
       'model.replies': 'Replies',
+      'model.output': 'Output',
       'model.cache': 'Cache',
       'model.speed': 'Speed',
+      'model.postCompactSpeed': 'Avg speed since last compaction',
       'model.calls': 'Calls',
-      'mtype.cache_read': 'Cache read',
-      'mtype.text_input': 'Text input',
-      'mtype.image_input': 'Image input',
       'mtype.thinking': 'Thinking',
       'mtype.tool_call': 'Tool call',
       'mtype.reply': 'Text output',
+      'uinput.text': 'Text input',
+      'uinput.image': 'Image input',
+      'uinput.file': 'File / Media',
       'step.label': 'Step #{step}',
       'step.turn': 'Turn {turn}',
       'step.prompt': 'Context',
@@ -256,6 +261,7 @@
       'layout.s.ctx': 'Context Breakdown',
       'layout.s.telemetry': 'Telemetry KPIs',
       'layout.s.models': 'Models',
+      'layout.s.tokens': 'Token Breakdown',
       'layout.s.timing': 'Time Breakdown',
       'layout.s.trend': 'Context Trend',
       'layout.s.hooks': 'Tool Execution',
@@ -301,6 +307,8 @@
       'trace.model': '模型',
       'trace.tool': '工具',
       'trace.system': '注入',
+      'trace.compaction': '上下文压缩',
+      'trace.compactionTag': '压缩',
       'trace.error': '错误',
       'inj.time': '时间',
       'inj.image': '图片',
@@ -311,6 +319,7 @@
       'trace.follow': '跟随',
       'trace.followTip': '新事件到来时自动滚动到底部',
       'trace.latest': '最新',
+      'trace.loadMore': '加载更早记录 (+{step}) · 还有 {n} 条',
       'trace.search': '搜索工具、参数或结果…',
       'trace.empty': '暂无匹配的调用记录',
       'trace.toolOnly': '（仅工具调用）',
@@ -495,15 +504,17 @@
       'hm.weeks': '近 {n} 周',
       'model.thinking': '思考',
       'model.replies': '回复',
+      'model.output': '输出',
       'model.cache': '缓存',
       'model.speed': '速度',
+      'model.postCompactSpeed': '本次压缩后的平均速度',
       'model.calls': '调用',
-      'mtype.cache_read': '缓存读取',
-      'mtype.text_input': '文字输入',
-      'mtype.image_input': '图片输入',
       'mtype.thinking': '思考',
       'mtype.tool_call': '工具调用',
       'mtype.reply': '文字输出',
+      'uinput.text': '文字输入',
+      'uinput.image': '图片输入',
+      'uinput.file': '文件 / 媒体',
       'step.label': '步骤 #{step}',
       'step.turn': '第 {turn} 轮',
       'step.prompt': '上下文',
@@ -530,6 +541,7 @@
       'layout.s.ctx': '上下文占比分布',
       'layout.s.telemetry': '核心指标条',
       'layout.s.models': '模型分布',
+      'layout.s.tokens': 'Token 分布',
       'layout.s.timing': '耗时分布',
       'layout.s.trend': '上下文趋势',
       'layout.s.hooks': '工具执行',
@@ -584,12 +596,15 @@
   const MODEL_COLORS = ['var(--violet)', 'var(--rose)', '#14b8a6', '#f97316'];
 
   const MODEL_TYPE_COLORS = {
-    cache_read: 'var(--blue)',
-    text_input: 'var(--green)',
-    image_input: 'var(--pink)',
     thinking: 'var(--violet)',
     tool_call: 'var(--amber)',
     reply: 'var(--slate-ink)',
+  };
+
+  const USER_INPUT_COLORS = {
+    text: 'var(--green)',
+    image: 'var(--pink)',
+    file: 'var(--blue)',
   };
 
   const TIMING_META = [
@@ -605,16 +620,17 @@
 
   const DEFAULT_SESSION_CTX_LIMIT = 500_000;
 
-  const DEFAULT_SESSION_ORDER = ['ctx', 'telemetry', 'models', 'timing', 'trend', 'hooks', 'trace'];
+  const DEFAULT_SESSION_ORDER = ['ctx', 'telemetry', 'models', 'tokens', 'timing', 'trend', 'hooks', 'trace'];
   const DEFAULT_OVERVIEW_ORDER = ['top', 'mid', 'models', 'hooks', 'lists', 'sessions'];
   const SESSION_CARD_WEIGHTS = {
-    ctx: 560,
+    ctx: 690,
     telemetry: 80,
-    models: 150,
+    models: 145,
+    tokens: 135,
     timing: 110,
     trend: 210,
     hooks: 115,
-    trace: 280,
+    trace: 270,
   };
 
   function normalizeLayoutConfig(raw, defaults) {
@@ -638,7 +654,7 @@
     return { order, hidden };
   }
 
-  function loadSettings() {
+  function normalizeSettingsObj(parsed) {
     const base = {
       lang: 'en',
       pollMs: 1500,
@@ -646,25 +662,32 @@
       sessionLayout: { order: [...DEFAULT_SESSION_ORDER], hidden: [] },
       overviewLayout: { order: [...DEFAULT_OVERVIEW_ORDER], hidden: [] },
     };
+    if (!parsed || typeof parsed !== 'object') return base;
+    return {
+      ...base,
+      lang: parsed.lang === 'zh' ? 'zh' : 'en',
+      pollMs: Math.max(1000, Number(parsed.pollMs) || 1500),
+      defaultTab: ['session', 'project', 'global'].includes(parsed.defaultTab) ? parsed.defaultTab : 'session',
+      sessionLayout: normalizeLayoutConfig(parsed.sessionLayout, DEFAULT_SESSION_ORDER),
+      overviewLayout: normalizeLayoutConfig(parsed.overviewLayout, DEFAULT_OVERVIEW_ORDER),
+    };
+  }
+
+  function loadSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return base;
-      const parsed = JSON.parse(raw);
-      return {
-        ...base,
-        lang: parsed.lang === 'zh' ? 'zh' : 'en',
-        pollMs: Math.max(1000, Number(parsed.pollMs) || 1500),
-        defaultTab: parsed.defaultTab || 'session',
-        sessionLayout: normalizeLayoutConfig(parsed.sessionLayout, DEFAULT_SESSION_ORDER),
-        overviewLayout: normalizeLayoutConfig(parsed.overviewLayout, DEFAULT_OVERVIEW_ORDER),
-      };
+      if (!raw) return normalizeSettingsObj(null);
+      return normalizeSettingsObj(JSON.parse(raw));
     } catch {
-      return base;
+      return normalizeSettingsObj(null);
     }
   }
 
-  function saveSettings(s) {
+  function saveSettings(s, { syncDisk = true } = {}) {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+    if (syncDisk) {
+      apiPost('/api/settings/save', { settings: s }).catch(() => {});
+    }
   }
 
   const params = new URLSearchParams(location.search);
@@ -717,7 +740,7 @@
     sessionData: null,
     traceEtag: '',
     traceData: null,
-    traceEnabled: new Set(['input', 'system', 'skill', 'model', 'tool', 'error']),
+    traceEnabled: new Set(['input', 'system', 'skill', 'model', 'tool', 'compaction', 'error']),
     traceQuery: '',
     traceSelectedIdx: null,
     traceDetailTab: 'overview',
@@ -727,6 +750,9 @@
     traceFollow: true,
     traceStick: true,
     traceFirstScroll: true,
+    traceLimit: 250,
+    traceHiddenEarlier: 0,
+    traceLoadingEarlier: false,
     overviewEtag: '',
     overviewData: null,
     // Session interactive state (preserved across live polls!)
@@ -912,6 +938,54 @@
 
   const CHEVRON_SVG = '<svg class="bd-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5L8 6l-3.5 3.5"/></svg>';
 
+  function computeSessionSpeedStats(s) {
+    const avgSpeed = Number(s?.timing?.outputTokPerSec || 0);
+    const tl = Array.isArray(s?.timeline) ? s.timeline : [];
+
+    // Peak single-call speed (prefer backend timing.maxTokPerSec, fallback to timeline)
+    let maxSpeed = Number(s?.timing?.maxTokPerSec || 0);
+    if (!maxSpeed && tl.length) {
+      let bestQualified = 0;
+      let bestAny = 0;
+      for (const pt of tl) {
+        const rate = Number(pt?.tokPerSec || 0);
+        if (rate <= 0) continue;
+        if (rate > bestAny) bestAny = rate;
+        if ((pt.durationMs || 0) >= 200 && (pt.outputTokens || 0) >= 10 && rate > bestQualified) {
+          bestQualified = rate;
+        }
+      }
+      maxSpeed = Math.max(avgSpeed, bestQualified || bestAny || 0);
+    }
+
+    // Per-model post-compaction average speed (from last compaction forward)
+    let lastCompIdx = -1;
+    for (let i = tl.length - 1; i >= 0; i--) {
+      if (tl[i]?.compacted) {
+        lastCompIdx = i;
+        break;
+      }
+    }
+    const postWindow = lastCompIdx >= 0 ? tl.slice(lastCompIdx) : tl;
+    const agg = {};
+    for (const pt of postWindow) {
+      const dur = Number(pt?.durationMs || 0);
+      const out = Number(pt?.outputTokens || 0);
+      const m = pt?.model || 'default';
+      if (dur > 0 && out > 0) {
+        if (!agg[m]) agg[m] = { out: 0, ms: 0 };
+        agg[m].out += out;
+        agg[m].ms += dur;
+      }
+    }
+    const postCompactByModel = {};
+    for (const [m, v] of Object.entries(agg)) {
+      postCompactByModel[m] = v.ms > 0 ? Math.round((v.out / (v.ms / 1000)) * 10) / 10 : 0;
+    }
+
+    return { avgSpeed, maxSpeed, postCompactByModel };
+  }
+
   // ---------- Build Breakdown Rows (Non-model categories + Per-model rows + Free space) ----------
   function buildSessionRows(s, ctxLimit) {
     const comp = s.composition || {};
@@ -948,11 +1022,16 @@
           items: [],
         }];
 
+    const speedStats = computeSessionSpeedStats(s);
     models.forEach((mc, idx) => {
       if (!mc.total && !mc.calls) return;
       const inTok = mc.inputTokens || 0;
       const cacheTok = mc.cacheReadTokens || 0;
       const outTok = mc.outputTokens || 0;
+      const postSpeed = mc.postCompactTokPerSec
+        || speedStats.postCompactByModel[mc.model]
+        || mc.tokPerSec
+        || 0;
       rows.push({
         id: `model:${mc.model}`,
         kind: 'model',
@@ -961,7 +1040,8 @@
         color: MODEL_COLORS[idx % MODEL_COLORS.length],
         value: mc.total || 0,
         count: mc.calls || 0,
-        speed: mc.tokPerSec || 0,
+        speed: postSpeed,
+        avgSpeed: mc.tokPerSec || 0,
         thinking: mc.thinking || 0,
         reply: mc.reply || 0,
         cacheHitRate: mc.cacheHitRate || 0,
@@ -1068,6 +1148,32 @@
     }).join('');
   }
 
+  // ---------- Shared Token Breakdown Renderer (Cumulative total tokens across Session / Project / Global) ----------
+  function renderTokenBreakdown(barEl, legendEl, metaEl, cum, totalTokens = 0) {
+    if (!barEl || !legendEl) return;
+    const src = cum || {};
+    const tokSegs = ALL_OVERVIEW_CATS.map((c) => ({ ...c, label: t(`cat.${c.key}`), value: src[c.key] || 0 }));
+    const segSum = tokSegs.reduce((a, x) => a + x.value, 0);
+    const tokTotal = segSum || 1;
+    if (metaEl) metaEl.textContent = fmtTokens(totalTokens || segSum || 0);
+    barEl.innerHTML = tokSegs
+      .filter((x) => x.value > 0)
+      .map((x) => `<div class="ctx-seg" style="width:${((x.value / tokTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtTokens(x.value)}"></div>`)
+      .join('');
+    legendEl.innerHTML = tokSegs.map((x) => `
+      <div class="comp-item" title="${esc(x.label)}: ${fmtTokens(x.value)} (${fmtPct(x.value / tokTotal, 1)})">
+        <div class="comp-left">
+          <span class="comp-dot" style="background:${x.color}"></span>
+          <span class="comp-name">${esc(x.label)}</span>
+        </div>
+        <div class="comp-right">
+          <span class="comp-sub">${fmtTokens(x.value)}</span>
+          <span class="comp-pct">${fmtPct(x.value / tokTotal, 1)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
   // ---------- Shared Time Breakdown Renderer (Session / Project / Global) ----------
   function renderTimingBreakdown(barEl, legendEl, speedEl, tm) {
     if (!barEl || !legendEl) return;
@@ -1148,6 +1254,7 @@
     }
 
     if (!s || !s.modelCalls) {
+      updateTopbarSpeed(null);
       $('session-content').classList.add('hidden');
       $('session-empty').classList.remove('hidden');
       const hasConv = !!activeSessionId();
@@ -1168,6 +1275,7 @@
     const used = usedSum || s.currentContext || s.lastPromptTokens || 0;
     const ratio = Math.min(1, used / ctxLimit);
     const speed = s.timing?.outputTokPerSec || 0;
+    updateTopbarSpeed(s);
 
     // Compaction count chip (displayed right beside % above the context bar)
     const compList = s.compactions || [];
@@ -1266,7 +1374,10 @@
     $('s-output-tokens').textContent = fmtTokens(tot.outputTokens || 0);
     $('s-calls').textContent = t('kpi.callsSub', { calls: s.modelCalls, tools: s.toolCallsCount });
     $('s-duration').textContent = fmtDur(s.timing?.activeMs || 0);
-    $('s-speed').textContent = `${speed} tok/s`;
+    const spStats = computeSessionSpeedStats(s);
+    $('s-speed').textContent = spStats.avgSpeed > 0
+      ? (spStats.maxSpeed > 0 ? `avg ${spStats.avgSpeed} · max ${spStats.maxSpeed} tok/s` : `avg ${spStats.avgSpeed} tok/s`)
+      : '0 tok/s';
 
     // Per-Model Breakdown (Session)
     const sessModels = Array.isArray(s.modelsBreakdown) && s.modelsBreakdown.length
@@ -1282,6 +1393,9 @@
           };
         }).sort((a, b) => b.totalTokens - a.totalTokens);
     renderModelsCard($('s-models-list'), $('s-models-bar'), $('s-models-meta'), sessModels, { showSessions: false });
+
+    // Cumulative Token Breakdown (Session — total tokens across all turns)
+    renderTokenBreakdown($('s-token-bar'), $('s-token-legend'), $('s-token-total-meta'), s.cumulativeComposition, tot.totalTokens || 0);
 
     // Time Breakdown (Session)
     renderTimingBreakdown($('s-timing-bar'), $('s-timing-legend'), $('s-timing-speed'), s.timing);
@@ -1422,12 +1536,42 @@
       }
 
       const isOpen = state.expandedKeys.has(r.id);
-      const sorted = r.kind === 'model' ? [] : sortBySizeDesc(r.items || []);
+      let rawItems = r.items || [];
+      // Ensure user_messages is always merged by input type (text / image / file)
+      if (r.key === 'user_messages' && rawItems.length && rawItems.some((it) => !it.group)) {
+        const mergedMap = new Map();
+        for (const it of rawItems) {
+          const mediaN = Number(it.mediaCount || 0);
+          const tok = Math.max(0, Number(it.tokens || 0));
+          const imgTok = mediaN > 0 ? Math.min(tok, mediaN * 258) : 0;
+          const txtTok = Math.max(0, tok - imgTok);
+          if (txtTok > 0) {
+            const cur = mergedMap.get('text') || { group: 'text', label: 'Text input', count: 0, tokens: 0, tool: 'user', step: 0 };
+            cur.count += 1;
+            cur.tokens += txtTok;
+            mergedMap.set('text', cur);
+          }
+          if (imgTok > 0) {
+            const cur = mergedMap.get('image') || { group: 'image', label: 'Image input', count: 0, tokens: 0, tool: 'user', step: 0 };
+            cur.count += mediaN;
+            cur.tokens += imgTok;
+            mergedMap.set('image', cur);
+          }
+        }
+        rawItems = [...mergedMap.values()];
+      }
+      const sorted = r.kind === 'model' ? [] : sortBySizeDesc(rawItems);
       const visible = sorted.slice(0, 16);
       const hiddenCount = Math.max(0, sorted.length - visible.length);
 
       let childrenInner = '';
       if (r.kind === 'model') {
+        // Strictly current context window breakdown matching r.value (mc.thinking + mc.reply)
+        const typeRows = [
+          { type: 'thinking', tokens: Math.max(0, Number(r.thinking || 0)) },
+          { type: 'reply', tokens: Math.max(0, Number(r.reply || 0)) },
+        ].filter((x) => x.tokens > 0);
+        const typeTotal = typeRows.reduce((a, x) => a + x.tokens, 0) || r.value || 1;
         childrenInner += `
           <div class="bd-model-summary">
             <span>${esc(t('model.calls'))} <strong>${r.count || 0}</strong></span>
@@ -1435,37 +1579,16 @@
             <span>${esc(t('model.speed'))} <strong>${r.speed || 0} tok/s</strong></span>
           </div>
         `;
-        // Aggregate by token type (Cache, Text input, Image input, Thinking, Tool call, Text output)
-        let typeRows = r.typeBreakdown;
-        if (!Array.isArray(typeRows)) {
-          const outSum = r.outputTokens || ((r.thinking || 0) + (r.reply || 0));
-          const toolEst = Math.max(0, outSum - (r.thinking || 0) - (r.reply || 0));
-          typeRows = [
-            { type: 'cache_read', tokens: r.cacheReadTokens || 0, rate: r.cacheHitRate || 0 },
-            { type: 'text_input', tokens: r.inputTokens || 0 },
-            { type: 'thinking', tokens: r.thinking || 0 },
-            { type: 'tool_call', tokens: toolEst },
-            { type: 'reply', tokens: r.reply || 0 },
-          ].filter((x) => x.tokens > 0);
-        }
-        const typeTotal = typeRows.reduce((a, x) => a + (x.tokens || 0), 0) || r.totalTokens || 1;
         if (typeRows.length) {
           childrenInner += typeRows.map((tb) => {
             const dotColor = MODEL_TYPE_COLORS[tb.type] || 'var(--fg-muted)';
             const label = t(`mtype.${tb.type}`);
-            let tag = '';
-            if (tb.type === 'cache_read' && tb.rate > 0) {
-              tag = `<span class="bd-child-tag">${fmtPct(tb.rate, 1)}</span>`;
-            } else if ((tb.type === 'image_input' || tb.type === 'tool_call') && tb.count > 0) {
-              tag = `<span class="bd-child-tag">×${tb.count}</span>`;
-            }
             return `
               <div class="bd-child">
                 <div class="bd-child-main">
                   <div class="bd-child-left">
                     <span class="bd-child-dot" style="background:${dotColor}"></span>
                     <span class="bd-child-label">${esc(label)}</span>
-                    ${tag}
                   </div>
                   <div class="bd-child-right">
                     <span class="bd-child-tok">${fmtTokens(tb.tokens)}</span>
@@ -1480,25 +1603,34 @@
         }
       } else if (visible.length) {
         childrenInner += visible.map((it) => {
+          const isUserRow = r.key === 'user_messages';
           const isSkillRow = r.key === 'skill_injection' || it.tool === 'skill';
           const isToolRow = r.key === 'tool_calls';
           const isFailedTool = isToolRow && (it.failed || it.status === 'ERROR');
           const isInjectedRow = r.key === 'injected_content';
-          const showToolTag = !isSkillRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
-          const childLabel = isInjectedRow && it.group && (I18N[settings.lang]?.[`inj.${it.group}`] || I18N.en[`inj.${it.group}`])
-            ? t(`inj.${it.group}`)
-            : (it.label || '');
+          const showToolTag = !isUserRow && !isSkillRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
+          const childLabel = isUserRow && it.group && (I18N[settings.lang]?.[`uinput.${it.group}`] || I18N.en[`uinput.${it.group}`])
+            ? t(`uinput.${it.group}`)
+            : isInjectedRow && it.group && (I18N[settings.lang]?.[`inj.${it.group}`] || I18N.en[`inj.${it.group}`])
+              ? t(`inj.${it.group}`)
+              : (it.label || '');
+          const userDot = isUserRow && it.group
+            ? `<span class="bd-child-dot" style="background:${USER_INPUT_COLORS[it.group] || 'var(--green)'}"></span>`
+            : '';
           let countPill = '';
           if (isFailedTool) {
             const errTxt = it.count > 1 ? `${t('trace.error')} ×${it.count}` : t('trace.error');
             countPill = `<span class="bd-child-tag err">${esc(errTxt)}</span>`;
-          } else if ((isInjectedRow || isSkillRow || isToolRow) && it.count > 1) {
+          } else if ((isUserRow || isInjectedRow || isSkillRow || isToolRow) && it.count > 1) {
+            countPill = `<span class="bd-child-tag">×${it.count}</span>`;
+          } else if (isUserRow && (it.group === 'image' || it.group === 'file') && it.count > 0) {
             countPill = `<span class="bd-child-tag">×${it.count}</span>`;
           }
           return `
             <div class="bd-child">
               <div class="bd-child-main">
                 <div class="bd-child-left">
+                  ${userDot}
                   ${showToolTag ? `<span class="bd-child-tag${it.status === 'ERROR' ? ' err' : ''}">${esc(it.tool)}</span>` : ''}
                   <span class="bd-child-label${isToolRow ? ' mono' : ''}">${esc(childLabel)}</span>
                   ${countPill}
@@ -1526,8 +1658,8 @@
               ${CHEVRON_SVG}
               <span class="bd-dot" style="background:${r.color}"></span>
               <span class="bd-name${r.kind === 'model' ? ' mono' : ''}">${esc(r.label)}</span>
-              ${r.count > 0 ? `<span class="bd-count">${r.count}</span>` : ''}
-              ${r.kind === 'model' && r.speed ? `<span class="bd-speed">${r.speed} tok/s</span>` : ''}
+              ${r.kind !== 'model' && r.count > 0 ? `<span class="bd-count">${r.count}</span>` : ''}
+              ${r.kind === 'model' && r.speed ? `<span class="bd-speed" title="${esc(t('model.postCompactSpeed'))}">${r.speed} tok/s</span>` : ''}
             </div>
             <div class="bd-right">
               <span class="bd-tok">${fmtTokens(r.value)}</span>
@@ -1743,6 +1875,10 @@
     }
   }
 
+  function isCompactionItem(it) {
+    return Boolean(it && (it.kind === 'compaction' || it.systemType === 'COMPACTION' || it.status === 'COMPACTED'));
+  }
+
   function getSystemBadges(it) {
     if (!it || it.kind !== 'system') return [];
     const set = new Set();
@@ -1818,13 +1954,18 @@
     const newestFirst = [...items].reverse();
 
     el.innerHTML = newestFirst.map((it) => {
-      const dotCls = it.hasError ? 'error' : it.kind;
+      const isComp = isCompactionItem(it);
+      const dotCls = it.hasError ? 'error' : (isComp ? 'compaction' : it.kind);
       let name = '';
       let preview = '';
       let extraBadge = '';
       let rightMeta = `#${it.step}`;
 
-      if (it.kind === 'input') {
+      if (isComp) {
+        name = t('trace.compaction');
+        preview = String(it.preview || '').replace(/^Context compacted:\s*/i, '');
+        rightMeta = `#${it.step}`;
+      } else if (it.kind === 'input') {
         name = t('trace.input');
         preview = it.preview || '';
         rightMeta = `T${it.turn} · #${it.step}`;
@@ -1877,10 +2018,18 @@
     if (!d) return;
 
     const isProject = state.tab === 'project';
+    const projRow = $('ov-project-row');
     const projPill = $('ov-project-pill');
     const projName = d.workspace || state.currentProject.workspace || '';
-    projPill.classList.toggle('hidden', !isProject || !projName);
-    if (isProject && projName) projPill.textContent = projName;
+    const showProj = isProject && !!projName;
+    if (projRow) projRow.classList.toggle('hidden', !showProj);
+    if (projPill) {
+      projPill.classList.toggle('hidden', !showProj);
+      if (showProj) {
+        projPill.textContent = projName;
+        projPill.title = projName;
+      }
+    }
 
     const startInput = $('ov-date-start');
     const endInput = $('ov-date-end');
@@ -1907,27 +2056,8 @@
 
     renderUsageChart(d.usageSeries, d.range, state.selectedDate);
 
-    // Token breakdown (compact horizontal bar + 2-col legend — unified with Session view!)
-    const cum = d.cumulativeComposition || {};
-    const tokSegs = ALL_OVERVIEW_CATS.map((c) => ({ ...c, label: t(`cat.${c.key}`), value: cum[c.key] || 0 }));
-    const tokTotal = tokSegs.reduce((a, x) => a + x.value, 0) || 1;
-    $('ov-token-total-meta').textContent = fmtTokens(kpi.totalTokens || 0);
-    $('ov-token-bar').innerHTML = tokSegs
-      .filter((x) => x.value > 0)
-      .map((x) => `<div class="ctx-seg" style="width:${((x.value / tokTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtTokens(x.value)}"></div>`)
-      .join('');
-    $('ov-token-legend').innerHTML = tokSegs.map((x) => `
-      <div class="comp-item" title="${esc(x.label)}: ${fmtTokens(x.value)} (${fmtPct(x.value / tokTotal, 1)})">
-        <div class="comp-left">
-          <span class="comp-dot" style="background:${x.color}"></span>
-          <span class="comp-name">${esc(x.label)}</span>
-        </div>
-        <div class="comp-right">
-          <span class="comp-sub">${fmtTokens(x.value)}</span>
-          <span class="comp-pct">${fmtPct(x.value / tokTotal, 1)}</span>
-        </div>
-      </div>
-    `).join('');
+    // Token breakdown (shared cumulative renderer across Session / Project / Global)
+    renderTokenBreakdown($('ov-token-bar'), $('ov-token-legend'), $('ov-token-total-meta'), d.cumulativeComposition, kpi.totalTokens || 0);
 
     // Timing breakdown
     renderTimingBreakdown($('ov-timing-bar'), $('ov-timing-legend'), $('ov-output-speed'), d.timing);
@@ -2404,11 +2534,13 @@
     { key: 'skill', labelKey: 'trace.skill', color: 'var(--pink)' },
     { key: 'model', labelKey: 'trace.model', color: 'var(--violet)' },
     { key: 'tool', labelKey: 'trace.tool', color: 'var(--amber)' },
+    { key: 'compaction', labelKey: 'trace.compactionTag', color: 'var(--slate-ink)' },
     { key: 'error', labelKey: 'trace.error', color: 'var(--rose)' },
   ];
 
   function traceEventMatchesTags(it) {
     if (it.hasError) return state.traceEnabled.has('error');
+    if (isCompactionItem(it)) return state.traceEnabled.has('compaction');
     return state.traceEnabled.has(it.kind);
   }
 
@@ -2578,7 +2710,34 @@
     }).join('');
   }
 
-  function renderTrace() {
+  function loadEarlierTrace() {
+    if (!state.traceHiddenEarlier || state.traceLoadingEarlier) return;
+    state.traceLoadingEarlier = true;
+    const listEl = $('trace-list');
+    const oldStrip = $('trace-strip-scroll');
+    const prevH = listEl ? listEl.scrollHeight : 0;
+    const prevTop = listEl ? listEl.scrollTop : 0;
+    const prevStripW = oldStrip ? oldStrip.scrollWidth : 0;
+    const prevStripLeft = oldStrip ? oldStrip.scrollLeft : 0;
+
+    state.traceLimit += 250;
+    state.traceStick = false;
+    renderTrace({ skipScrollRestore: true });
+
+    if (listEl) {
+      const addedH = listEl.scrollHeight - prevH;
+      if (addedH > 0) listEl.scrollTop = prevTop + addedH;
+    }
+    const newStrip = $('trace-strip-scroll');
+    if (newStrip && prevStripW > 0) {
+      const addedW = newStrip.scrollWidth - prevStripW;
+      if (addedW > 0) newStrip.scrollLeft = prevStripLeft + addedW;
+    }
+    updateTraceJumpBtn();
+    requestAnimationFrame(() => { state.traceLoadingEarlier = false; });
+  }
+
+  function renderTrace(opts = {}) {
     const data = state.traceData;
     const listEl = $('trace-list');
     const stripEl = $('trace-strip');
@@ -2588,9 +2747,9 @@
     const shouldStick = state.traceFirstScroll || (state.traceFollow && state.traceStick);
 
     if ($('trace-total-count')) $('trace-total-count').textContent = String(allItems.length);
-    const exclusiveCounts = { input: 0, system: 0, skill: 0, model: 0, tool: 0, error: 0 };
+    const exclusiveCounts = { input: 0, system: 0, skill: 0, model: 0, tool: 0, compaction: 0, error: 0 };
     for (const it of allItems) {
-      const bucket = it.hasError ? 'error' : it.kind;
+      const bucket = it.hasError ? 'error' : (isCompactionItem(it) ? 'compaction' : it.kind);
       if (bucket in exclusiveCounts) exclusiveCounts[bucket]++;
     }
     renderTraceTags(exclusiveCounts);
@@ -2612,6 +2771,7 @@
         || String(it.skillName || '').toLowerCase().includes(q)
         || String(it.model || '').toLowerCase().includes(q)
         || String(it.systemType || '').toLowerCase().includes(q)
+        || (isCompactionItem(it) && t('trace.compaction').toLowerCase().includes(q))
         || (it.kind === 'system' && formatSystemName(it).includes(q))
         || (it.kind === 'system' && getSystemBadges(it).some((b) => b.includes(q) || t(`inj.${b}`).toLowerCase().includes(q)))
         || String(it.preview || '').toLowerCase().includes(q)
@@ -2619,24 +2779,34 @@
         || String(it.resultPreview || '').toLowerCase().includes(q);
     });
 
-    // 4-track mini visual strip with fixed left labels + scrollable right track.
-    // ONLY the cell belonging to an event's own lane is interactive and selectable!
-    const stripItems = filtered.length > 400 ? filtered.slice(-400) : filtered;
+    // Progressive pagination: start with latest traceLimit events and seamlessly
+    // load earlier history when scrolling to top (or clicking Load earlier).
+    const hiddenEarlier = Math.max(0, filtered.length - state.traceLimit);
+    state.traceHiddenEarlier = hiddenEarlier;
+    const visible = hiddenEarlier > 0 ? filtered.slice(-state.traceLimit) : filtered;
+
+    // 3-track mini visual strip with fixed left labels + scrollable right track.
+    // Compaction markers span all 3 lanes as a vertical grey dashed divider line!
+    const stripItems = visible;
     if (!stripItems.length) {
       stripEl.classList.add('hidden');
     } else {
       stripEl.classList.remove('hidden');
       const lanes = [
-        { key: 'input', labelKey: 'trace.input', match: (it) => it.kind === 'input' || it.kind === 'system' },
-        { key: 'model', labelKey: 'trace.model', match: (it) => it.kind === 'model' },
-        { key: 'tool', labelKey: 'trace.tool', match: (it) => it.kind === 'tool' || it.kind === 'skill' },
+        { key: 'input', labelKey: 'trace.input', match: (it) => !isCompactionItem(it) && (it.kind === 'input' || it.kind === 'system') },
+        { key: 'model', labelKey: 'trace.model', match: (it) => !isCompactionItem(it) && it.kind === 'model' },
+        { key: 'tool', labelKey: 'trace.tool', match: (it) => !isCompactionItem(it) && (it.kind === 'tool' || it.kind === 'skill') },
       ];
       const renderLaneCells = (lane) => `
         <div class="ts-cells">
           ${stripItems.map((it) => {
+            const sel = state.traceSelectedIdx === it.idx ? ' selected' : '';
+            if (isCompactionItem(it)) {
+              const tip = `#${it.step} ${t('trace.compaction')}${it.preview ? ` · ${String(it.preview).replace(/^Context compacted:\s*/i, '')}` : ''}`;
+              return `<div class="ts-cell hit on-compaction${sel}" data-tidx="${it.idx}" title="${esc(tip)}"></div>`;
+            }
             if (!lane.match(it)) return '<div class="ts-cell"></div>';
             const cls = it.hasError ? 'on-error' : `on-${it.kind}`;
-            const sel = state.traceSelectedIdx === it.idx ? ' selected' : '';
             const label = it.skillName || it.toolName || it.model || it.systemType || t(`trace.${it.kind}`);
             return `<div class="ts-cell hit ${cls}${sel}" data-tidx="${it.idx}" title="#${it.step} ${esc(label)}"></div>`;
           }).join('')}
@@ -2660,6 +2830,12 @@
           }
         });
       });
+      const stripScrollEl = $('trace-strip-scroll');
+      stripScrollEl?.addEventListener('scroll', () => {
+        if (!state.traceFirstScroll && state.traceHiddenEarlier > 0 && stripScrollEl.scrollLeft <= 12) {
+          loadEarlierTrace();
+        }
+      }, { passive: true });
     }
 
     if (!filtered.length) {
@@ -2668,17 +2844,23 @@
       return;
     }
 
-    // Cap rendered DOM rows to latest 400 matching items for snappy scrolling on huge sessions
-    const visible = filtered.length > 400 ? filtered.slice(-400) : filtered;
+    const loadMoreHtml = hiddenEarlier > 0
+      ? `<button type="button" id="btn-trace-load-earlier" class="trace-load-more">↑ ${esc(t('trace.loadMore', { step: Math.min(250, hiddenEarlier), n: hiddenEarlier }))}</button>`
+      : '';
     const rowsHtml = visible.map((it) => {
       const sel = state.traceSelectedIdx === it.idx ? ' selected' : '';
-      const dotCls = it.hasError ? 'error' : it.kind;
+      const isComp = isCompactionItem(it);
+      const dotCls = it.hasError ? 'error' : (isComp ? 'compaction' : it.kind);
       let name = '';
       let preview = '';
       let extraBadge = '';
       let rightMeta = `#${it.step}`;
 
-      if (it.kind === 'input') {
+      if (isComp) {
+        name = t('trace.compaction');
+        preview = String(it.preview || '').replace(/^Context compacted:\s*/i, '');
+        rightMeta = `#${it.step}`;
+      } else if (it.kind === 'input') {
         name = t('trace.input');
         preview = it.preview || (it.mediaCount ? `[${it.mediaCount} media]` : '');
         rightMeta = `T${it.turn} · #${it.step}`;
@@ -2739,21 +2921,24 @@
       `;
     }
 
-    listEl.innerHTML = rowsHtml + liveGenHtml;
+    listEl.innerHTML = loadMoreHtml + rowsHtml + liveGenHtml;
 
+    $('btn-trace-load-earlier')?.addEventListener('click', loadEarlierTrace);
     listEl.querySelectorAll('.tr-row[data-tidx]').forEach((btn) => {
       btn.addEventListener('click', () => toggleTraceDetail(Number(btn.dataset.tidx)));
     });
     updateGeneratingTicker();
 
     const stripScroll = $('trace-strip-scroll');
-    if (shouldStick) {
-      state.traceFirstScroll = false;
-      requestAnimationFrame(() => scrollTraceToBottom(false));
-    } else {
-      listEl.scrollTop = prevScrollTop;
-      if (stripScroll) stripScroll.scrollLeft = prevStripScroll;
-      updateTraceJumpBtn();
+    if (!opts.skipScrollRestore) {
+      if (shouldStick) {
+        state.traceFirstScroll = false;
+        requestAnimationFrame(() => scrollTraceToBottom(false));
+      } else {
+        listEl.scrollTop = prevScrollTop;
+        if (stripScroll) stripScroll.scrollLeft = prevStripScroll;
+        updateTraceJumpBtn();
+      }
     }
 
     if (state.traceSelectedIdx != null) {
@@ -2818,20 +3003,24 @@
 
   function renderTraceDetailPanel(item) {
     const badge = $('td-kind-badge');
+    const isComp = isCompactionItem(item);
     const badgeCls = item.hasError ? 'tag-err'
+      : isComp ? 'tag-neutral'
       : item.kind === 'input' ? 'tag-write'
       : item.kind === 'model' ? 'tag-read'
       : item.kind === 'skill' ? 'tag-read'
       : item.kind === 'system' ? 'tag-read'
       : 'tag-edit';
     badge.className = `tag-pill ${badgeCls}`;
-    badge.textContent = item.kind === 'tool'
-      ? (item.toolName || t('trace.tool'))
-      : item.kind === 'skill'
-        ? (item.skillName || t('trace.skill'))
-        : item.kind === 'system'
-          ? formatSystemName(item)
-          : t(`trace.${item.kind}`);
+    badge.textContent = isComp
+      ? t('trace.compaction')
+      : item.kind === 'tool'
+        ? (item.toolName || t('trace.tool'))
+        : item.kind === 'skill'
+          ? (item.skillName || t('trace.skill'))
+          : item.kind === 'system'
+            ? formatSystemName(item)
+            : t(`trace.${item.kind}`);
     $('td-step-label').textContent = `${t('step.turn', { turn: item.turn })} · ${t('step.label', { step: item.step })}`;
 
     // Tailored tabs per event kind:
@@ -3123,6 +3312,31 @@
     });
   }
 
+  function updateTopbarSpeed(s) {
+    const el = $('topbar-speed');
+    if (!el) return;
+    if (!s || state.tab !== 'session') {
+      el.classList.add('hidden');
+      return;
+    }
+    const curModel = s.model || '';
+    const spStats = computeSessionSpeedStats(s);
+    const mcEntry = (s.modelComposition || []).find((m) => m.model === curModel);
+    const mbEntry = (s.modelsBreakdown || []).find((m) => m.model === curModel);
+    const spd = mcEntry?.postCompactTokPerSec
+      || spStats.postCompactByModel[curModel]
+      || mbEntry?.tokPerSec
+      || s.timing?.outputTokPerSec
+      || 0;
+    if (!spd) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.textContent = `${spd} tok/s`;
+    el.title = curModel ? `${curModel} · ${spd} tok/s` : `${spd} tok/s`;
+    el.classList.remove('hidden');
+  }
+
   // ---------- Tab, Project Resolution, Language & Settings Actions ----------
   function selectTab(tab) {
     const prev = state.tab;
@@ -3149,6 +3363,7 @@
     $('view-trace').classList.toggle('active', state.tab === 'trace');
     $('view-overview').classList.toggle('active', state.tab === 'project' || state.tab === 'global');
     $('view-settings').classList.toggle('active', state.tab === 'settings');
+    updateTopbarSpeed(state.sessionData);
     updateGeneratingTicker();
     if (state.tab === 'settings') {
       populateSettingsView();
@@ -3551,6 +3766,7 @@
           state.traceSelectedIdx = null;
           state.traceFirstScroll = true;
           state.traceStick = true;
+          state.traceLimit = 250;
           state.traceDetailCache.clear();
         }
       }
@@ -3650,7 +3866,10 @@
 
   // ---------- Event Wiring ----------
   document.querySelectorAll('.seg-tab').forEach((btn) => {
-    btn.addEventListener('click', () => selectTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      state.userSwitchedTab = true;
+      selectTab(btn.dataset.tab);
+    });
   });
 
   $('btn-lang').addEventListener('click', () => {
@@ -3717,8 +3936,12 @@
   });
 
   $('trace-list').addEventListener('scroll', () => {
+    const el = $('trace-list');
     state.traceStick = isNearTraceBottom();
     updateTraceJumpBtn();
+    if (!state.traceFirstScroll && state.traceHiddenEarlier > 0 && el.scrollTop <= 48) {
+      loadEarlierTrace();
+    }
   }, { passive: true });
   $('btn-open-inspected').addEventListener('click', () => {
     if (state.inspectedConvId) window.sidecar?.ui?.toggleConversation?.(state.inspectedConvId);
@@ -3819,6 +4042,39 @@
     if (e.key === 'Escape' && state.tab === 'settings') closeSettings();
   });
 
+  async function hydrateSettingsFromDisk() {
+    try {
+      const res = await apiGet('/api/settings');
+      if (res?.found && res.settings) {
+        const merged = normalizeSettingsObj(res.settings);
+        Object.assign(settings, merged);
+        saveSettings(settings, { syncDisk: false });
+        if ($('set-lang')) $('set-lang').value = settings.lang;
+        if ($('set-poll')) $('set-poll').value = String(settings.pollMs);
+        if ($('set-default-tab')) $('set-default-tab').value = settings.defaultTab;
+        applyStaticI18n();
+        applyContextLayout(true);
+        renderUpdatePill();
+        renderLayoutEditor();
+        if (!state.userSwitchedTab && !IS_TRACE_PANE && !params.get('tab') && !params.get('view') && state.tab !== 'settings') {
+          const desired = normalizeTabParam(settings.defaultTab) || 'session';
+          if (desired !== state.tab) selectTab(desired);
+        }
+        renderSession();
+        renderTrace();
+        renderOverview();
+        schedulePoll();
+      } else {
+        // First-time migration: persist any existing localStorage settings to disk
+        let hasLocal = false;
+        try { hasLocal = !!localStorage.getItem(SETTINGS_KEY); } catch { /* ignore */ }
+        if (hasLocal) saveSettings(settings, { syncDisk: true });
+      }
+    } catch {
+      // Older sidecar before restart — keep localStorage settings gracefully
+    }
+  }
+
   // Boot: configure standalone Trace pane vs Context pane
   if (IS_TRACE_PANE) {
     document.title = 'Trace';
@@ -3829,5 +4085,6 @@
   applyStaticI18n();
   applyContextLayout(true);
   selectTab(state.tab);
+  hydrateSettingsFromDisk();
   checkUpdateOnOpen();
 })();
