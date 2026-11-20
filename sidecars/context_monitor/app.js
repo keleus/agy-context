@@ -1260,8 +1260,9 @@
       $('session-content').classList.add('hidden');
       $('session-empty').classList.remove('hidden');
       const hasConv = !!activeSessionId();
-      $('session-empty-title').textContent = t(hasConv ? 'empty.noDataTitle' : 'empty.noConvTitle');
-      $('session-empty-desc').textContent = t(hasConv ? 'empty.noDataDesc' : 'empty.noConvDesc');
+      const inHost = Boolean(window.sidecar);
+      $('session-empty-title').textContent = t(hasConv || inHost ? 'empty.noDataTitle' : 'empty.noConvTitle');
+      $('session-empty-desc').textContent = t(hasConv || inHost ? 'empty.noDataDesc' : 'empty.noConvDesc');
       return;
     }
 
@@ -3775,27 +3776,22 @@
     state.inFlight = true;
     try {
       const currentHost = hostConvId();
-      if (currentHost && currentHost !== state.lastHostConvId) {
+      if (currentHost !== state.lastHostConvId) {
         state.lastHostConvId = currentHost;
-        if (!state.inspectedConvId) {
-          state.sessionEtag = '';
-          state.traceEtag = '';
-          state.traceSelectedIdx = null;
-          state.traceFirstScroll = true;
-          state.traceStick = true;
-          state.traceLimit = 250;
-          state.traceDetailCache.clear();
-        }
+        state.inspectedConvId = null;
+        state.sessionEtag = '';
+        state.sessionData = null;
+        state.traceEtag = '';
+        state.traceData = null;
+        state.traceSelectedIdx = null;
+        state.traceFirstScroll = true;
+        state.traceStick = true;
+        state.traceLimit = 250;
+        state.traceDetailCache.clear();
       }
 
       if (state.tab === 'session') {
-        let targetId = activeSessionId();
-        if (!targetId) {
-          const ov = await apiGet('/api/overview?range=all');
-          state.overviewData = ov;
-          targetId = ov.sessions?.[0]?.conversationId || '';
-          if (targetId) state.inspectedConvId = targetId;
-        }
+        const targetId = activeSessionId();
         if (targetId) {
           const qs = new URLSearchParams({ conversationId: targetId });
           if (state.sessionEtag) qs.set('etag', state.sessionEtag);
@@ -3813,18 +3809,13 @@
             renderSession();
           }
         } else {
+          state.sessionEtag = '';
           state.sessionData = null;
           setLiveState(null);
           renderSession();
         }
       } else if (state.tab === 'trace') {
-        let targetId = activeSessionId();
-        if (!targetId) {
-          const ov = await apiGet('/api/overview?range=all');
-          state.overviewData = ov;
-          targetId = ov.sessions?.[0]?.conversationId || '';
-          if (targetId) state.inspectedConvId = targetId;
-        }
+        const targetId = activeSessionId();
         if (targetId) {
           const qs = new URLSearchParams({ conversationId: targetId });
           if (state.traceEtag) qs.set('etag', state.traceEtag);
@@ -3836,7 +3827,10 @@
             renderTrace();
           }
         } else {
+          state.traceEtag = '';
           state.traceData = null;
+          state.traceSelectedIdx = null;
+          state.traceDetailCache.clear();
           setLiveState(null);
           renderTrace();
         }
@@ -3923,7 +3917,9 @@
   $('btn-back-current').addEventListener('click', () => {
     state.inspectedConvId = null;
     state.sessionEtag = '';
+    state.sessionData = null;
     state.traceEtag = '';
+    state.traceData = null;
     state.traceSelectedIdx = null;
     state.traceDetailCache.clear();
     pollNow();

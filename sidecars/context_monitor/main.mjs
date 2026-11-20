@@ -960,8 +960,15 @@ function buildOverview({ range = '30d', date = '', start = '', end = '', workspa
 // Route handlers
 // ---------------------------------------------------------------------------
 
+function resolveRequestConvId(data, defaultConvId) {
+  const raw = data && Object.prototype.hasOwnProperty.call(data, 'conversationId')
+    ? data.conversationId
+    : defaultConvId;
+  return String(raw || '').trim();
+}
+
 function handleSession(data, defaultConvId) {
-  const convId = String(data.conversationId || defaultConvId || '').trim();
+  const convId = resolveRequestConvId(data, defaultConvId);
   if (!convId || !ID_RE.test(convId)) {
     return { conversationId: convId || null, found: false, defaultModelSpecs: DEFAULT_MODEL_SPECS };
   }
@@ -1036,7 +1043,7 @@ function handleOverview(data) {
 }
 
 function handleTrace(data, defaultConvId) {
-  const convId = String(data.conversationId || defaultConvId || '').trim();
+  const convId = resolveRequestConvId(data, defaultConvId);
   if (!convId || !ID_RE.test(convId)) return { conversationId: convId || null, found: false };
   const appData = locateConversation(convId);
   if (!appData) return { conversationId: convId, found: false };
@@ -1056,7 +1063,7 @@ function handleTrace(data, defaultConvId) {
 }
 
 function handleTraceDetail(data, defaultConvId) {
-  const convId = String(data.conversationId || defaultConvId || '').trim();
+  const convId = resolveRequestConvId(data, defaultConvId);
   const idx = Number(data.idx);
   if (!convId || !ID_RE.test(convId) || !Number.isInteger(idx) || idx < 0) {
     return { found: false };
