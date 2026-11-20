@@ -3319,21 +3319,25 @@
       el.classList.add('hidden');
       return;
     }
-    const curModel = s.model || '';
-    const spStats = computeSessionSpeedStats(s);
-    const mcEntry = (s.modelComposition || []).find((m) => m.model === curModel);
-    const mbEntry = (s.modelsBreakdown || []).find((m) => m.model === curModel);
-    const spd = mcEntry?.postCompactTokPerSec
-      || spStats.postCompactByModel[curModel]
-      || mbEntry?.tokPerSec
-      || s.timing?.outputTokPerSec
-      || 0;
+    // Use the latest completed model call's real-time speed (updates on every call!)
+    const tl = Array.isArray(s.timeline) ? s.timeline : [];
+    let latestCall = null;
+    for (let i = tl.length - 1; i >= 0; i--) {
+      const pt = tl[i];
+      if (pt && Number(pt.tokPerSec) > 0 && Number(pt.durationMs) > 0 && Number(pt.outputTokens) > 0) {
+        latestCall = pt;
+        break;
+      }
+    }
+    const spd = latestCall ? Number(latestCall.tokPerSec) : (s.timing?.outputTokPerSec || 0);
     if (!spd) {
       el.classList.add('hidden');
       return;
     }
+    const curModel = latestCall?.model || s.model || '';
+    const stepTag = latestCall?.step != null ? ` #${latestCall.step}` : '';
     el.textContent = `${spd} tok/s`;
-    el.title = curModel ? `${curModel} · ${spd} tok/s` : `${spd} tok/s`;
+    el.title = curModel ? `${curModel}${stepTag} · ${spd} tok/s` : `${spd} tok/s`;
     el.classList.remove('hidden');
   }
 
