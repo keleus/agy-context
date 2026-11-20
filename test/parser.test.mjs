@@ -374,6 +374,22 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(toolLive.liveState.active, true);
   assert.equal(toolLive.liveState.phase, 'tools');
   assert.equal(toolLive.liveState.lastTool, 'run_command');
+
+  // Reverted branch detection: append-only log reusing step_index marks superseded lines reverted
+  const revertLines = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-20T15:00:00Z', content: '<USER_REQUEST>\nkeep me\n</USER_REQUEST>' },
+    { step_index: 1, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-20T15:01:00Z', content: '<USER_REQUEST>\nreverted prompt\n</USER_REQUEST>' },
+    { step_index: 2, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-11-20T15:01:02Z', model: 'gemini-4', input_tokens: 1000, cache_read_tokens: 0, output_tokens: 50, content: 'old reply' },
+    { step_index: 1, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-20T15:02:00Z', content: '<USER_REQUEST>\nnew prompt\n</USER_REQUEST>' },
+    { step_index: 2, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-11-20T15:02:02Z', model: 'gemini-4', input_tokens: 1000, cache_read_tokens: 0, output_tokens: 80, content: 'new reply' },
+  ];
+  const revTrace = parseTrace(revertLines.map((x) => JSON.stringify(x)).join('\n'));
+  assert.equal(revTrace.items.length, 5);
+  assert.equal(revTrace.items[0].reverted, false); // step 0 kept
+  assert.equal(revTrace.items[1].reverted, true);  // old step 1 reverted
+  assert.equal(revTrace.items[2].reverted, true);  // old step 2 reverted
+  assert.equal(revTrace.items[3].reverted, false); // new step 1 active
+  assert.equal(revTrace.items[4].reverted, false); // new step 2 active
 }
 
 // 6. Real live transcript smoke test (if path passed via env)

@@ -987,6 +987,7 @@ function handleSession(data, defaultConvId) {
         at: d.at,
         durationMs: d.durationMs,
         hasError: d.hasError,
+        reverted: Boolean(d.reverted),
         hasThinking: d.hasThinking,
         hasReply: d.hasReply,
         toolName: d.toolName,

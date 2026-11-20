@@ -29,6 +29,7 @@
       'trace.system': 'Injected',
       'trace.compaction': 'Context compaction',
       'trace.compactionTag': 'Compaction',
+      'trace.reverted': 'Reverted',
       'trace.error': 'Error',
       'inj.time': 'Time',
       'inj.image': 'Image',
@@ -309,6 +310,7 @@
       'trace.system': '注入',
       'trace.compaction': '上下文压缩',
       'trace.compactionTag': '压缩',
+      'trace.reverted': '已撤回',
       'trace.error': '错误',
       'inj.time': '时间',
       'inj.image': '图片',
@@ -973,14 +975,14 @@
       const out = Number(pt?.outputTokens || 0);
       const m = pt?.model || 'default';
       if (dur > 0 && out > 0) {
-        if (!agg[m]) agg[m] = { out: 0, ms: 0 };
-        agg[m].out += out;
+        if (!agg[m]) agg[m] = { tok: 0, ms: 0 };
+        agg[m].tok += out;
         agg[m].ms += dur;
       }
     }
     const postCompactByModel = {};
     for (const [m, v] of Object.entries(agg)) {
-      postCompactByModel[m] = v.ms > 0 ? Math.round((v.out / (v.ms / 1000)) * 10) / 10 : 0;
+      postCompactByModel[m] = v.ms > 0 ? Math.round((v.tok / (v.ms / 1000)) * 10) / 10 : 0;
     }
 
     return { avgSpeed, maxSpeed, postCompactByModel };
@@ -1375,9 +1377,11 @@
     $('s-calls').textContent = t('kpi.callsSub', { calls: s.modelCalls, tools: s.toolCallsCount });
     $('s-duration').textContent = fmtDur(s.timing?.activeMs || 0);
     const spStats = computeSessionSpeedStats(s);
-    $('s-speed').textContent = spStats.avgSpeed > 0
+    const speedLine = spStats.avgSpeed > 0
       ? (spStats.maxSpeed > 0 ? `avg ${spStats.avgSpeed} · max ${spStats.maxSpeed} tok/s` : `avg ${spStats.avgSpeed} tok/s`)
       : '0 tok/s';
+    $('s-speed').textContent = speedLine;
+    $('s-speed').title = speedLine;
 
     // Per-Model Breakdown (Session)
     const sessModels = Array.isArray(s.modelsBreakdown) && s.modelsBreakdown.length
@@ -1992,11 +1996,13 @@
         rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       }
 
+      const revBadge = it.reverted ? `<span class="tr-think-badge badge-reverted">${esc(t('trace.reverted'))}</span>` : '';
       return `
-        <div class="tr-row static">
+        <div class="tr-row static${it.reverted ? ' reverted' : ''}">
           <div class="tr-left">
             <span class="tr-dot ${dotCls}"></span>
             <span class="tr-name">${esc(name)}</span>
+            ${revBadge}
             ${extraBadge}
             <span class="tr-preview${it.kind === 'tool' ? ' mono' : ''}">${esc(preview)}</span>
           </div>
@@ -2801,14 +2807,16 @@
         <div class="ts-cells">
           ${stripItems.map((it) => {
             const sel = state.traceSelectedIdx === it.idx ? ' selected' : '';
+            const revCls = it.reverted ? ' reverted' : '';
+            const revNote = it.reverted ? ` (${t('trace.reverted')})` : '';
             if (isCompactionItem(it)) {
               const tip = `#${it.step} ${t('trace.compaction')}${it.preview ? ` · ${String(it.preview).replace(/^Context compacted:\s*/i, '')}` : ''}`;
-              return `<div class="ts-cell hit on-compaction${sel}" data-tidx="${it.idx}" title="${esc(tip)}"></div>`;
+              return `<div class="ts-cell hit on-compaction${sel}${revCls}" data-tidx="${it.idx}" title="${esc(tip)}"></div>`;
             }
             if (!lane.match(it)) return '<div class="ts-cell"></div>';
             const cls = it.hasError ? 'on-error' : `on-${it.kind}`;
             const label = it.skillName || it.toolName || it.model || it.systemType || t(`trace.${it.kind}`);
-            return `<div class="ts-cell hit ${cls}${sel}" data-tidx="${it.idx}" title="#${it.step} ${esc(label)}"></div>`;
+            return `<div class="ts-cell hit ${cls}${sel}${revCls}" data-tidx="${it.idx}" title="#${it.step} ${esc(label)}${esc(revNote)}"></div>`;
           }).join('')}
         </div>
       `;
@@ -2887,11 +2895,13 @@
         rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       }
 
+      const revBadge = it.reverted ? `<span class="tr-think-badge badge-reverted">${esc(t('trace.reverted'))}</span>` : '';
       return `
-        <button type="button" class="tr-row${sel}" data-tidx="${it.idx}">
+        <button type="button" class="tr-row${sel}${it.reverted ? ' reverted' : ''}" data-tidx="${it.idx}">
           <div class="tr-left">
             <span class="tr-dot ${dotCls}"></span>
             <span class="tr-name">${esc(name)}</span>
+            ${revBadge}
             ${extraBadge}
             <span class="tr-preview${it.kind === 'tool' ? ' mono' : ''}">${esc(preview)}</span>
           </div>
@@ -3021,7 +3031,7 @@
           : item.kind === 'system'
             ? formatSystemName(item)
             : t(`trace.${item.kind}`);
-    $('td-step-label').textContent = `${t('step.turn', { turn: item.turn })} · ${t('step.label', { step: item.step })}`;
+    $('td-step-label').textContent = `${t('step.turn', { turn: item.turn })} · ${t('step.label', { step: item.step })}${item.reverted ? ` · ${t('trace.reverted')}` : ''}`;
 
     // Tailored tabs per event kind:
     // - Model: Overview | Preview | Raw
@@ -3105,8 +3115,6 @@
       const tcs = Array.isArray(item.toolCalls) ? item.toolCalls : [];
       const childIdxs = Array.isArray(item.childToolIdxs) ? item.childToolIdxs : [];
       const cachePct = item.promptTokens > 0 ? fmtPct(item.cacheReadTokens / item.promptTokens, 1) : '0%';
-      const estTtftMs = item.durationMs ? Math.round(item.durationMs * 0.28) : 0;
-      const genMs = Math.max(0, (item.durationMs || 0) - estTtftMs);
 
       const renderThinkingBox = (clamped) => {
         if (!item.thinking) return '';
@@ -3184,11 +3192,14 @@
         // Model Overview tab: inline-expandable Markdown preview + accurate Request Timing
         const expanded = !!state.traceOverviewExpanded;
         const hasTiming = (item.durationMs || 0) > 0;
+        const detailThroughput = hasTiming && (item.outputTokens || 0) > 0
+          ? Math.round((item.outputTokens / (item.durationMs / 1000)) * 10) / 10
+          : (item.tokPerSec || 0);
         const hasPreviewBody = !!(item.thinking || item.content || tcs.length);
         bodyEl.innerHTML = `
           ${kv([
             [t('td.model'), item.model || '—'],
-            [t('td.status'), item.status || 'DONE'],
+            [t('td.status'), item.reverted ? `${item.status || 'DONE'} (${t('trace.reverted')})` : (item.status || 'DONE')],
             [t('td.tokens'), `${fmtTokens(item.outputTokens)} out · ${fmtTokens(item.inputTokens)} in · ${fmtTokens(item.cacheReadTokens)} cached (${cachePct})`],
           ])}
           ${hasPreviewBody ? `
@@ -3207,9 +3218,7 @@
             ${kv([
               [t('td.start'), fmtIsoLocal(item.at)],
               [t('td.duration'), hasTiming ? `${(item.durationMs / 1000).toFixed(2)}s` : '—'],
-              [t('td.estTtft'), hasTiming && estTtftMs ? `${estTtftMs} ms` : '—'],
-              [t('td.genTime'), hasTiming && genMs ? `${(genMs / 1000).toFixed(2)}s` : '—'],
-              [t('td.throughput'), hasTiming && item.tokPerSec ? `${item.tokPerSec} tok/s` : '—'],
+              [t('td.throughput'), hasTiming && detailThroughput ? `${detailThroughput} tok/s` : '—'],
             ])}
             ${!hasTiming ? `<div class="td-timing-note">${esc(t('td.timingUnavailable'))}</div>` : ''}
           </div>
@@ -3319,17 +3328,21 @@
       el.classList.add('hidden');
       return;
     }
-    // Use the latest completed model call's real-time speed (updates on every call!)
+    // Use the latest completed model call's real-time speed: out / Duration
     const tl = Array.isArray(s.timeline) ? s.timeline : [];
     let latestCall = null;
     for (let i = tl.length - 1; i >= 0; i--) {
       const pt = tl[i];
-      if (pt && Number(pt.tokPerSec) > 0 && Number(pt.durationMs) > 0 && Number(pt.outputTokens) > 0) {
-        latestCall = pt;
+      const outTok = Number(pt?.outputTokens || 0);
+      const durMs = Number(pt?.durationMs || 0);
+      if (pt && durMs > 0 && outTok > 0) {
+        latestCall = { ...pt, outTok, durMs };
         break;
       }
     }
-    const spd = latestCall ? Number(latestCall.tokPerSec) : (s.timing?.outputTokPerSec || 0);
+    const spd = latestCall
+      ? Math.round((latestCall.outTok / (latestCall.durMs / 1000)) * 10) / 10
+      : (s.timing?.outputTokPerSec || 0);
     if (!spd) {
       el.classList.add('hidden');
       return;

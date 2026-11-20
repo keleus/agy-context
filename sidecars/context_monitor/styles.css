@@ -1489,6 +1489,7 @@ button { cursor: pointer; }
   background: color-mix(in srgb, var(--slate-ink) 16%, transparent);
   border-radius: 2px;
 }
+.ts-cell.reverted { opacity: 0.3; }
 .ts-cell.selected { outline: 1.5px solid var(--fg); outline-offset: 1px; }
 
 .trace-split {
@@ -1688,6 +1689,22 @@ button { cursor: pointer; }
 
 .tr-row.generating .tr-dot.model {
   animation: agy-pulse 1.2s ease-in-out infinite;
+}
+
+.tr-row.reverted {
+  opacity: 0.56;
+}
+
+.tr-row.reverted .tr-name,
+.tr-row.reverted .tr-preview {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--fg-muted) 65%, transparent);
+}
+
+.tr-think-badge.badge-reverted {
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+  text-decoration: none;
 }
 
 .trace-load-more {

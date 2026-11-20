@@ -1840,6 +1840,22 @@ export function parseTrace(text, { hookTimings = null } = {}) {
     }
   }
 
+  // Detect reverted/overwritten branches in append-only transcript logs:
+  // When the user reverts to step_index K, subsequent lines reuse step_index >= K.
+  // Scanning backwards with minStepSeen marks every superseded older line as reverted.
+  const revertedFlags = new Array(steps.length).fill(false);
+  let minStepSeen = Infinity;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const si = steps[i]?.step_index;
+    if (typeof si === 'number' && Number.isFinite(si)) {
+      if (si >= minStepSeen) {
+        revertedFlags[i] = true;
+      } else {
+        minStepSeen = si;
+      }
+    }
+  }
+
   const items = [];
   const details = [];
   const counts = { total: 0, input: 0, system: 0, skill: 0, model: 0, tool: 0, error: 0 };
@@ -1864,6 +1880,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
   for (let i = 0; i < steps.length; i++) {
     const st = steps[i];
     const stMs = parseMs(st.created_at);
+    const isReverted = Boolean(revertedFlags[i]);
 
     if (st.type === 'USER_INPUT') {
       if (st.source === 'USER_EXPLICIT' || !st.source) turn++;
@@ -1879,6 +1896,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
           durationMs: 0,
           status: st.status || 'DONE',
           hasError: st.status === 'ERROR',
+          reverted: isReverted,
           preview: preview.slice(0, 160),
           mediaCount: Array.isArray(st.media) ? st.media.length : 0,
         },
@@ -1904,6 +1922,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             durationMs: 0,
             status: 'INJECTED',
             hasError: false,
+            reverted: isReverted,
             systemType: blk.tag,
             systemBadge: sysBadges[0] || '',
             systemBadges: sysBadges,
@@ -1926,8 +1945,8 @@ export function parseTrace(text, { hookTimings = null } = {}) {
       const outTok = Math.max(0, Number(st.output_tokens) || 0);
       const promptTok = inTok + cacheTok;
 
-      // Detect context compaction drops as their own Injected/System trace marker
-      if (prevPromptTokens > 0 && promptTok < prevPromptTokens - 1000) {
+      // Detect context compaction drops as their own marker (ignore reverted branches)
+      if (!isReverted && prevPromptTokens > 0 && promptTok < prevPromptTokens - 1000) {
         const saved = prevPromptTokens - promptTok;
         pushEntry(
           {
@@ -1939,6 +1958,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             durationMs: 0,
             status: 'COMPACTED',
             hasError: false,
+            reverted: false,
             systemType: 'COMPACTION',
             systemBadge: 'compaction',
             systemBadges: ['compaction'],
@@ -1950,7 +1970,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
           },
         );
       }
-      prevPromptTokens = promptTok;
+      if (!isReverted) prevPromptTokens = promptTok;
 
       // Collect following GENERIC tool result steps up to next non-GENERIC step
       const childGenerics = [];
@@ -1997,6 +2017,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
           timingUnavailable: modelDurMs === 0,
           status: st.status || 'DONE',
           hasError: st.status === 'ERROR',
+          reverted: isReverted,
           model: String(st.model || 'default'),
           inputTokens: inTok,
           cacheReadTokens: cacheTok,
@@ -2073,6 +2094,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             durationMs: toolDurMs,
             status: failed ? 'ERROR' : (resStep?.status || 'DONE'),
             hasError: failed,
+            reverted: Boolean(revertedFlags[resWrap?.rawIdx ?? i]) || isReverted,
             toolName,
             skillName: skillName || '',
             argsPreview: skillName ? skillName : compactArgsPreview(cleanArgs),
@@ -2111,6 +2133,7 @@ export function parseTrace(text, { hookTimings = null } = {}) {
             durationMs: 0,
             status: st.status || 'DONE',
             hasError: st.status === 'ERROR',
+            reverted: isReverted,
             systemType: sysType,
             systemBadge: sysBadges[0] || '',
             systemBadges: sysBadges,
