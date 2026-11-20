@@ -1296,7 +1296,6 @@ async function runSelfUpdate() {
       'hooks.json',
       'hooks',
       'sidecars',
-      'skills',
       'assets',
       'README.md',
       'LICENSE',
@@ -1308,6 +1307,7 @@ async function runSelfUpdate() {
         cpSync(from, join(PLUGIN_ROOT, item), { recursive: true, force: true });
       }
     }
+    try { rmSync(join(PLUGIN_ROOT, 'skills'), { recursive: true, force: true }); } catch { /* ignore */ }
 
     versionCache = { ts: 0, result: null };
     updateState.status = 'reloading';

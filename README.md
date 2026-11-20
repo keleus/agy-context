@@ -5,23 +5,23 @@ An Antigravity plugin (sidecar UI extension + lightweight lifecycle hooks) that 
 ## Features
 
 ### Context (`Session | Project | Global`)
-- **Adaptive Context Occupancy**: Full-window horizontal context bar with remaining free space, cache hit rate, and output speed (`tok/s`). Defaults to `500k` per session, locks to the first observed compaction peak once compaction occurs, and automatically extends if a session grows past its ceiling without compacting.
-- **Expandable Context Breakdown**: Categories sorted descending by token usage (with free space pinned at the bottom). Expand any category to inspect individual files, skills, injected blocks, user messages, tool outputs, active rule files (`AGENTS.md`, `GEMINI.md`, `.agents/rules/*.md`), or per-model usage.
-- **Per-Model Telemetry**: Token totals, call counts, cache hit rate, and measured output speed broken down by model ID across Session, Project, and Global scopes.
-- **Turn Execution & Live Timer**: Powered by lightweight read-only lifecycle hooks (`SessionStart`, `PreInvocation`, `PostToolUse`, `PostInvocation`, `Stop`), showing a live in-flight timer (`Generating` / `Tools`) in the top bar, exact final-reply latency & throughput, turn averages, loop depth, tool error rate, and stop-reason breakdown.
-- **Context Trend & Recent Trace**: Stacked bar or curve chart tracking context growth and compaction events per model call, plus a reverse-chronological live feed of the latest trace events.
-- **Project & Global Insights**: Workspace-scoped and cross-workspace dashboards featuring adaptive usage charts (`hour` / `day` / `week` / `month` / `year`), interactive calendar heatmap, ranked skills/tools/commands, and searchable session cards.
+- **Adaptive Context Occupancy & Ring Gauge**: Circular occupancy gauge (`≥80%` amber warning, `≥90%` red critical), full-window horizontal bar with free space, cache hit rate, compaction counter, and real-time latest-call speed in the top bar. Defaults to `500k` per session, adapts to observed compaction ceilings, and tracks the historical session peak when exceeded.
+- **Current-Window Context Breakdown**: Mutually exclusive breakdown of live context occupancy across `System prompt`, `System tools`, `User messages` (merged by `Text input`, `Image input`, `File / Media`), `Injected context` (grouped by `Time`, `Image`, `Compaction`, `Settings`, `Other`), `Skills` (merged by skill name), `Tool results` (split by tool name & success/error), and per-model output (`Thinking` & `Text output`) with post-compaction average speed.
+- **Session Telemetry & Breakdowns**: 4-metric KPI strip (`Total Tokens`, `Cache Read`, `Output`, `Active Time` with `avg` & `max` `tok/s`), **Models**, **Token Breakdown** (cumulative session totals), **Time Breakdown**, **Context Trend** (smooth Bezier curve cleanly broken at every compaction drop), **Tool Execution** (succeeded/failed counts, ratio bar, total & average duration), and **Recent Trace**.
+- **Project & Global Insights**: Workspace-scoped and cross-workspace dashboards featuring a free `Start → End` date range picker + quick presets (`Today`, `7d`, `30d`, `All`), adaptive usage charts (`hour` / `day` / `week` / `month` / `year`), **Token & Time Breakdown**, **Models**, **Tool Execution**, ranked **Skills / Tools / Commands** (sorted by `Count`, `Time`, or `Context`), and searchable session cards with one-click jump.
 
 ### Trace (Dedicated Side Pane)
 - **Standalone Auxiliary Tab**: Open **Trace** alongside **Context** from the `+` or **Extensions** menu to watch requests and tool calls stream live.
-- **Multi-Select Type Toggles**: Toggle visibility for `Input`, `Injected`, `Skill`, `Model`, `Tool`, and `Error`, with `ADDITIONAL_METADATA` time injections automatically tagged as `Time Context`.
-- **3-Track Mini Timeline**: Sticky left lane labels (`Input` / `Model` / `Tool`) with auto-scrolling clickable event cells.
-- **Rich Master-Detail Inspector**: Multi-tag model rows (`Thinking`, `toolcall`, `output`), click-to-toggle detail drawer (top/bottom in portrait, left/right in landscape), in-place expandable Markdown preview, raw content blocks, tool arguments/results, host errors, and request timing.
+- **3-Track Timeline Strip**: Fixed left lane labels (`Input` / `Model` / `Tool`) with vertical grey dashed divider lines for **Context Compaction** events and dimmed markers for **Reverted** branches.
+- **Exclusive Type Toggles & Revert Detection**: Independently filter `Input`, `Injected`, `Skill`, `Model`, `Tool`, `Compaction`, and `Error`, with automatic detection and `Reverted` badge / strikethrough marking for superseded branches.
+- **Progressive History Loading & Live Generation**: Automatically loads earlier history as you scroll back to Step `#0`, while displaying a pulsing live generating row at the bottom during active model calls.
+- **Master-Detail Inspector**: Multi-tag model rows (`Thinking`, `Tool Call`, `Output`), click-to-toggle detail drawer, in-place expandable Markdown preview, raw content blocks, tool arguments/results, host errors, and real measured request timing.
 
-### Customization
-- **Bilingual UI**: English by default with a persistent `EN / 简` switcher in the top bar.
-- **Native Theme Sync**: Automatically follows Antigravity's light and dark themes.
-- **Settings**: Configure language, refresh interval, default view, and check for GitHub releases.
+### Customization & Self-Update
+- **Bilingual UI & Theme Sync**: English and Simplified Chinese (`EN / 简`), automatically matching Antigravity's light and dark themes.
+- **Context Modules & Order Editor**: Show/hide and drag-or-move modules independently for both **Session** and **Project & Global**, with responsive 2-column independent-stack layout on wide screens.
+- **Disk-Persisted Settings**: Stored atomically in `$PLUGIN_DATA/settings.json` so preferences survive disable/enable, restarts, and updates.
+- **One-Click Self-Update**: Automatically checks GitHub Releases and updates + reloads in-place.
 
 ## Installation
 
@@ -55,7 +55,7 @@ To uninstall:
 
 ## Privacy & Architecture
 
-- **Local-only sidecar & hooks**: Reads local conversation transcripts under `~/.gemini/antigravity/brain/<conversationId>/.system_generated/logs/` and stores lightweight timing telemetry under `$PLUGIN_DATA/timings/`. Never modifies conversation files or intercepts tool approval permissions.
+- **Local-only sidecar & hooks**: Reads local conversation transcripts under `~/.gemini/antigravity/brain/<conversationId>/.system_generated/logs/` and stores lightweight timing telemetry & settings under `$PLUGIN_DATA/`. Never modifies conversation files or intercepts tool approval permissions.
 - **Zero external runtime dependencies**: Runs directly on Antigravity's bundled Node.js runtime (`sidecar_sdk`) and system `python3`.
 
 ## License

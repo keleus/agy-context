@@ -5,10 +5,5 @@
   "version": "1.0.0",
   "logo": "assets/logo.svg",
   "homepage": "https://github.com/keleus/agy-context",
-  "repository": "https://github.com/keleus/agy-context",
-  "suggestedPrompts": [
-    "Open the AGY Context side pane to inspect current session usage",
-    "Analyze which files or tools are consuming the most context in this session",
-    "Summarize my token usage and cache hit rate over the last 7 days"
-  ]
+  "repository": "https://github.com/keleus/agy-context"
 }

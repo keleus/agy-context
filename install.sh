@@ -23,7 +23,7 @@ case "$MODE" in
     mkdir -p "$(dirname "$TARGET_DIR")"
     rm -rf "$TARGET_DIR"
     mkdir -p "$TARGET_DIR"
-    cp -R "$REPO_DIR/plugin.json" "$REPO_DIR/hooks.json" "$REPO_DIR/hooks" "$REPO_DIR/README.md" "$REPO_DIR/assets" "$REPO_DIR/skills" "$REPO_DIR/sidecars" "$TARGET_DIR/"
+    cp -R "$REPO_DIR/plugin.json" "$REPO_DIR/hooks.json" "$REPO_DIR/hooks" "$REPO_DIR/README.md" "$REPO_DIR/LICENSE" "$REPO_DIR/assets" "$REPO_DIR/sidecars" "$TARGET_DIR/"
     echo "✅ 已复制安装 AGY Context 到: $TARGET_DIR"
     ;;
   uninstall|--uninstall)
