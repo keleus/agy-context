@@ -439,12 +439,33 @@ function matchHookInterval(intervals, stepIdx, stMs) {
   return best;
 }
 
+function computeRevertedFlags(steps) {
+  const revertedFlags = new Array(steps.length).fill(false);
+  let minStepSeen = Infinity;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const si = steps[i]?.step_index;
+    if (typeof si === 'number' && Number.isFinite(si)) {
+      if (si >= minStepSeen) {
+        revertedFlags[i] = true;
+      } else {
+        minStepSeen = si;
+      }
+    }
+  }
+  return revertedFlags;
+}
+
 /**
  * Summarizes lifecycle hook telemetry (SessionStart, PreInvocation, PostToolUse,
  * PostInvocation, Stop) into live in-flight status, turn-level duration/depth/
  * termination stats, and per-tool completion & error telemetry.
+ *
+ * When transcript `steps` are provided, reconciles an open `PreInvocation`
+ * against active (non-reverted) `PLANNER_RESPONSE` steps so `phase: 'generating'`
+ * only stays active while the model itself is generating — NOT while blocked on
+ * tool execution or user-interactive tools like `ask_question`.
  */
-export function summarizeHookTelemetry(hookTimings, nowMs = Date.now()) {
+export function summarizeHookTelemetry(hookTimings, nowMs = Date.now(), { steps = null, revertedFlags = null } = {}) {
   const empty = {
     hasData: false,
     liveState: { active: false, phase: 'idle', sinceMs: 0, inv: 0, model: '', lastTool: '' },
@@ -479,7 +500,7 @@ export function summarizeHookTelemetry(hookTimings, nowMs = Date.now()) {
   if (lastPre && lastEvent && lastEvent.ev !== 'Stop' && lastEvent.ev !== 'PostInvocation' && lastEvent.ev !== 'SessionStart') {
     const age = nowMs - lastPre.ts;
     if (age >= -5000 && age <= MAX_INFLIGHT_MS) {
-      if (lastEvent.ev === 'PostToolUse') {
+      if (lastEvent.ev === 'PostToolUse' || lastEvent.ev === 'PreToolUse') {
         liveState = {
           active: true,
           phase: 'tools',
@@ -497,6 +518,66 @@ export function summarizeHookTelemetry(hookTimings, nowMs = Date.now()) {
           model: String(lastPre.model || ''),
           lastTool: '',
         };
+      }
+    }
+  }
+
+  // Reconcile against transcript steps: once the model's PLANNER_RESPONSE for
+  // this PreInvocation is written as completed, model generation has ended
+  // (the turn is either waiting/running tools such as ask_question, or idle).
+  if (liveState.active && liveState.phase === 'generating' && lastPre && Array.isArray(steps) && steps.length > 0) {
+    const flags = Array.isArray(revertedFlags) && revertedFlags.length === steps.length
+      ? revertedFlags
+      : computeRevertedFlags(steps);
+    const initialSteps = lastPre.steps != null && Number.isFinite(Number(lastPre.steps))
+      ? Number(lastPre.steps)
+      : null;
+    const isStepDone = (st) => {
+      const s = String(st?.status || '').toUpperCase();
+      return !s || (s !== 'RUNNING' && s !== 'PENDING' && s !== 'IN_PROGRESS' && s !== 'GENERATING');
+    };
+
+    let completedPlanner = null;
+    if (initialSteps != null) {
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (flags[i]) continue;
+        const st = steps[i];
+        if (st?.type !== 'PLANNER_RESPONSE') continue;
+        const si = st.step_index != null ? Number(st.step_index) : i;
+        if (Number.isFinite(si) && si >= initialSteps) {
+          if (isStepDone(st)) completedPlanner = st;
+          break;
+        }
+        if (Number.isFinite(si) && si < initialSteps) break;
+      }
+    } else {
+      for (let i = steps.length - 1; i >= 0; i--) {
+        if (flags[i]) continue;
+        const st = steps[i];
+        if (st?.type === 'PLANNER_RESPONSE' && isStepDone(st)) {
+          const stMs = parseMs(st.created_at);
+          if (Number.isFinite(stMs) && stMs >= lastPre.ts - 2000) {
+            completedPlanner = st;
+          }
+        }
+        break;
+      }
+    }
+
+    if (completedPlanner) {
+      const stStatus = String(completedPlanner.status || '').toUpperCase();
+      const tcs = Array.isArray(completedPlanner.tool_calls) ? completedPlanner.tool_calls : [];
+      if (tcs.length > 0 && stStatus !== 'ERROR' && stStatus !== 'CANCELED' && stStatus !== 'CANCELLED') {
+        liveState = {
+          active: true,
+          phase: 'tools',
+          sinceMs: lastPre.ts,
+          inv: Number(lastPre.inv) || 1,
+          model: String(lastPre.model || ''),
+          lastTool: String(tcs[0]?.name || ''),
+        };
+      } else {
+        liveState = { active: false, phase: 'idle', sinceMs: 0, inv: 0, model: '', lastTool: '' };
       }
     }
   }
@@ -563,9 +644,8 @@ export function summarizeHookTelemetry(hookTimings, nowMs = Date.now()) {
 /**
  * Parses a transcript JSONL string into a rich, structured session summary.
  */
-export function parseTranscript(text, { conversationId = '', title = '', workspace = '', workspaceUri = '', fileMtime = 0, hookTimings = null } = {}) {
+export function parseTranscript(text, { conversationId = '', title = '', workspace = '', workspaceUri = '', fileMtime = 0, hookTimings = null, nowMs = Date.now() } = {}) {
   const hookIntervals = buildHookIntervals(hookTimings);
-  const hookTelemetry = summarizeHookTelemetry(hookTimings);
   const hookErrorSteps = new Set();
   const hookPostToolTs = new Map();
   if (Array.isArray(hookTimings)) {
@@ -588,6 +668,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
       // Torn trailing line while actively writing; safely ignored.
     }
   }
+  const hookTelemetry = summarizeHookTelemetry(hookTimings, nowMs, { steps });
 
   const plannerIndices = [];
   let turns = 0;
@@ -1815,9 +1896,8 @@ function detectSystemBadges(tag, text) {
  *   - summary items (lightweight list for fast rendering even on 2000+ step sessions)
  *   - detail records (full args, thinking, reply, tool output, timestamps)
  */
-export function parseTrace(text, { hookTimings = null } = {}) {
+export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}) {
   const hookIntervals = buildHookIntervals(hookTimings);
-  const hookSummary = summarizeHookTelemetry(hookTimings);
   const postToolsByStep = new Map();
   if (Array.isArray(hookTimings)) {
     for (const e of hookTimings) {
@@ -1843,18 +1923,8 @@ export function parseTrace(text, { hookTimings = null } = {}) {
   // Detect reverted/overwritten branches in append-only transcript logs:
   // When the user reverts to step_index K, subsequent lines reuse step_index >= K.
   // Scanning backwards with minStepSeen marks every superseded older line as reverted.
-  const revertedFlags = new Array(steps.length).fill(false);
-  let minStepSeen = Infinity;
-  for (let i = steps.length - 1; i >= 0; i--) {
-    const si = steps[i]?.step_index;
-    if (typeof si === 'number' && Number.isFinite(si)) {
-      if (si >= minStepSeen) {
-        revertedFlags[i] = true;
-      } else {
-        minStepSeen = si;
-      }
-    }
-  }
+  const revertedFlags = computeRevertedFlags(steps);
+  const hookSummary = summarizeHookTelemetry(hookTimings, nowMs, { steps, revertedFlags });
 
   const items = [];
   const details = [];

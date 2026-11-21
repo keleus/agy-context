@@ -375,6 +375,118 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(toolLive.liveState.phase, 'tools');
   assert.equal(toolLive.liveState.lastTool, 'run_command');
 
+  // Reconciling PreInvocation against transcript steps:
+  // Only show 'generating' while the model call itself is in flight; once
+  // PLANNER_RESPONSE is written (e.g. blocked on ask_question), exit 'generating'.
+  {
+    const t0 = Date.parse('2026-11-21T08:00:00.000Z');
+    const tNow = Date.parse('2026-11-21T08:00:25.000Z');
+    const preOnlyHooks = [
+      { ev: 'PreInvocation', ts: t0 + 1000, inv: 0, steps: 1, model: 'gemini-4-neon-high' },
+    ];
+    const userOnlyJsonl = JSON.stringify({
+      step_index: 0,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-11-21T08:00:00Z',
+      content: '<USER_REQUEST>\nHelp me decide\n</USER_REQUEST>',
+    });
+
+    // 1) Model still generating (no PLANNER_RESPONSE at step >= 1 yet)
+    const trGen = parseTrace(userOnlyJsonl, { hookTimings: preOnlyHooks, nowMs: tNow });
+    assert.equal(trGen.liveState.active, true);
+    assert.equal(trGen.liveState.phase, 'generating');
+
+    // 2) Model finished and called blocking tool ask_question (PostToolUse has not fired yet)
+    const askJsonl = [
+      userOnlyJsonl,
+      JSON.stringify({
+        step_index: 1,
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        status: 'DONE',
+        created_at: '2026-11-21T08:00:01Z',
+        model: 'gemini-4-neon-high',
+        input_tokens: 1000,
+        cache_read_tokens: 0,
+        output_tokens: 120,
+        tool_calls: [{ name: 'ask_question', args: { questions: [{ question: 'Proceed?' }] } }],
+      }),
+    ].join('\n');
+    const trAsk = parseTrace(askJsonl, { hookTimings: preOnlyHooks, nowMs: tNow });
+    assert.equal(trAsk.liveState.active, true);
+    assert.equal(trAsk.liveState.phase, 'tools');
+    assert.equal(trAsk.liveState.lastTool, 'ask_question');
+    const parsedAsk = parseTranscript(askJsonl, { conversationId: 'test-ask-live', hookTimings: preOnlyHooks, nowMs: tNow });
+    assert.equal(parsedAsk.hookTelemetry.liveState.phase, 'tools');
+
+    // 3) Model finished a final reply (no tool calls) even before Stop hook lands
+    const replyJsonl = [
+      userOnlyJsonl,
+      JSON.stringify({
+        step_index: 1,
+        source: 'MODEL',
+        type: 'PLANNER_RESPONSE',
+        status: 'DONE',
+        created_at: '2026-11-21T08:00:01Z',
+        model: 'gemini-4-neon-high',
+        input_tokens: 1000,
+        cache_read_tokens: 0,
+        output_tokens: 80,
+        content: 'All done!',
+      }),
+    ].join('\n');
+    const trReply = parseTrace(replyJsonl, { hookTimings: preOnlyHooks, nowMs: tNow });
+    assert.equal(trReply.liveState.active, false);
+    assert.equal(trReply.liveState.phase, 'idle');
+
+    // 4) Next invocation after tool finishes resumes 'generating'
+    const afterAskJsonl = [
+      askJsonl,
+      JSON.stringify({
+        step_index: 2,
+        source: 'MODEL',
+        type: 'GENERIC',
+        status: 'DONE',
+        created_at: '2026-11-21T08:00:18Z',
+        content: 'User answered: Yes',
+      }),
+    ].join('\n');
+    const nextInvHooks = [
+      ...preOnlyHooks,
+      { ev: 'PostToolUse', ts: t0 + 18500, step: 2, tool: 'ask_question' },
+      { ev: 'PostInvocation', ts: t0 + 18600, inv: 0, steps: 1 },
+      { ev: 'PreInvocation', ts: t0 + 19000, inv: 1, steps: 3, model: 'gemini-4-neon-high' },
+    ];
+    const trNextGen = parseTrace(afterAskJsonl, { hookTimings: nextInvHooks, nowMs: tNow });
+    assert.equal(trNextGen.liveState.active, true);
+    assert.equal(trNextGen.liveState.phase, 'generating');
+
+    // 5) Reverted branch: superseded PLANNER_RESPONSE at step 2 must not suppress 'generating'
+    const revertedGenJsonl = [
+      { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-21T08:00:00Z', content: '<USER_REQUEST>\nkeep\n</USER_REQUEST>' },
+      { step_index: 1, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-21T08:00:05Z', content: '<USER_REQUEST>\nold\n</USER_REQUEST>' },
+      { step_index: 2, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-11-21T08:00:06Z', model: 'gemini-4', input_tokens: 100, cache_read_tokens: 0, output_tokens: 20, content: 'old reply' },
+      { step_index: 1, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-21T08:00:20Z', content: '<USER_REQUEST>\nnew\n</USER_REQUEST>' },
+    ].map((x) => JSON.stringify(x)).join('\n');
+    const revHooks = [
+      { ev: 'PreInvocation', ts: t0 + 21000, inv: 0, steps: 2, model: 'gemini-4-neon-high' },
+    ];
+    const trRevGen = parseTrace(revertedGenJsonl, { hookTimings: revHooks, nowMs: tNow });
+    assert.equal(trRevGen.liveState.active, true);
+    assert.equal(trRevGen.liveState.phase, 'generating');
+
+    // 6) Legacy PreInvocation without steps field falls back safely to latest active PLANNER_RESPONSE
+    const legacyHooks = [
+      { ev: 'PreInvocation', ts: t0 + 1400, inv: 0, model: 'gemini-4-neon-high' },
+    ];
+    const trLegacyAsk = parseTrace(askJsonl, { hookTimings: legacyHooks, nowMs: tNow });
+    assert.equal(trLegacyAsk.liveState.active, true);
+    assert.equal(trLegacyAsk.liveState.phase, 'tools');
+    assert.equal(trLegacyAsk.liveState.lastTool, 'ask_question');
+  }
+
   // Reverted branch detection: append-only log reusing step_index marks superseded lines reverted
   const revertLines = [
     { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-20T15:00:00Z', content: '<USER_REQUEST>\nkeep me\n</USER_REQUEST>' },
