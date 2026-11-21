@@ -913,6 +913,18 @@
     return rm ? `${h}h${rm}m` : `${h}h`;
   }
 
+  function fmtTraceDur(ms) {
+    const v = Number(ms) || 0;
+    if (v <= 0) return '';
+    if (v < 60_000) return `${(v / 1000).toFixed(2)}s`;
+    const m = Math.floor(v / 60_000);
+    const remSec = (v % 60_000) / 1000;
+    if (m < 60) return `${m}m${remSec.toFixed(2)}s`;
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    return `${h}h${rm}m${remSec.toFixed(0)}s`;
+  }
+
   function fmtRelative(ms) {
     if (!ms) return '';
     const diff = Math.max(0, Date.now() - ms);
@@ -1087,7 +1099,7 @@
     if (isLiveGenerating() && state.tab === 'trace') {
       if (el) {
         const elapsedMs = Math.max(100, Date.now() - (state.liveState.sinceMs || Date.now()));
-        el.textContent = elapsedMs >= 60_000 ? fmtDur(elapsedMs) : `${(elapsedMs / 1000).toFixed(1)}s`;
+        el.textContent = fmtTraceDur(elapsedMs);
       }
       if (!state.liveTickTimer) {
         state.liveTickTimer = setInterval(updateGeneratingTicker, 250);
@@ -2068,45 +2080,39 @@
       let name = '';
       let preview = '';
       let extraBadge = '';
-      let rightMeta = `#${it.step}`;
+      const durText = fmtTraceDur(it.durationMs);
+      const rightMeta = durText ? `${durText} · #${it.step}` : `#${it.step}`;
 
       if (isComp) {
         name = t('trace.compaction');
         preview = String(it.preview || '').replace(/^Context compacted:\s*/i, '');
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'input') {
         name = t('trace.input');
         preview = it.preview || '';
-        rightMeta = `T${it.turn} · #${it.step}`;
       } else if (it.kind === 'system') {
         name = formatSystemName(it);
         extraBadge = renderSystemBadges(it);
         preview = it.preview || '';
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'skill') {
         name = it.skillName || t('trace.skill');
         extraBadge = `<span class="tr-think-badge" style="color:var(--pink);background:color-mix(in srgb,var(--pink) 12%,transparent)">SKILL</span>`;
         preview = it.resultPreview || '';
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'mcp') {
         name = it.mcpServer && it.mcpTool ? `${it.mcpServer} / ${it.mcpTool}` : (it.mcpTool || it.toolName || t('trace.mcp'));
         extraBadge = `<span class="tr-think-badge badge-mcp">MCP</span>${it.isMcpSchema ? '<span class="tr-think-badge badge-schema">schema</span>' : ''}`;
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview} → ${it.resultPreview}` : it.argsPreview)
           : (it.resultPreview || '');
-        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       } else if (it.kind === 'model') {
         name = it.model || t('trace.model');
         extraBadge = renderModelBadges(it);
         preview = it.preview || '';
-        rightMeta = `${fmtTokens(it.outputTokens)} · #${it.step}`;
       } else {
         name = (it.isCommand && it.commandName) ? it.commandName : (it.toolName || t('trace.tool'));
         if (it.isCommand) extraBadge = '<span class="tr-think-badge badge-cmd">CMD</span>';
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview} → ${it.resultPreview}` : it.argsPreview)
           : (it.resultPreview || '');
-        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       }
 
       const revBadge = it.reverted ? `<span class="tr-think-badge badge-reverted">${esc(t('trace.reverted'))}</span>` : '';
@@ -2991,45 +2997,39 @@
       let name = '';
       let preview = '';
       let extraBadge = '';
-      let rightMeta = `#${it.step}`;
+      const durText = fmtTraceDur(it.durationMs);
+      const rightMeta = durText ? `${durText} · #${it.step}` : `#${it.step}`;
 
       if (isComp) {
         name = t('trace.compaction');
         preview = String(it.preview || '').replace(/^Context compacted:\s*/i, '');
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'input') {
         name = t('trace.input');
         preview = it.preview || (it.mediaCount ? `[${it.mediaCount} media]` : '');
-        rightMeta = `T${it.turn} · #${it.step}`;
       } else if (it.kind === 'system') {
         name = formatSystemName(it);
         extraBadge = renderSystemBadges(it);
         preview = it.preview || '';
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'skill') {
         name = it.skillName || t('trace.skill');
         extraBadge = `<span class="tr-think-badge" style="color:var(--pink);background:color-mix(in srgb,var(--pink) 12%,transparent)">SKILL</span>`;
         preview = it.resultPreview || '';
-        rightMeta = `#${it.step}`;
       } else if (it.kind === 'mcp') {
         name = it.mcpServer && it.mcpTool ? `${it.mcpServer} / ${it.mcpTool}` : (it.mcpTool || it.toolName || t('trace.mcp'));
         extraBadge = `<span class="tr-think-badge badge-mcp">MCP</span>${it.isMcpSchema ? '<span class="tr-think-badge badge-schema">schema</span>' : ''}`;
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview}  →  ${it.resultPreview}` : it.argsPreview)
           : it.resultPreview;
-        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       } else if (it.kind === 'model') {
         name = it.model || t('trace.model');
         extraBadge = renderModelBadges(it);
         preview = it.preview || '';
-        rightMeta = `${fmtTokens(it.outputTokens)} · #${it.step}`;
       } else {
         name = (it.isCommand && it.commandName) ? it.commandName : (it.toolName || t('trace.tool'));
         if (it.isCommand) extraBadge = '<span class="tr-think-badge badge-cmd">CMD</span>';
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview}  →  ${it.resultPreview}` : it.argsPreview)
           : it.resultPreview;
-        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       }
 
       const revBadge = it.reverted ? `<span class="tr-think-badge badge-reverted">${esc(t('trace.reverted'))}</span>` : '';
@@ -3055,7 +3055,7 @@
         modelLabel = lastModelItem?.model || state.sessionData?.model || t('trace.model');
       }
       const elapsedMs = Math.max(100, Date.now() - (state.liveState.sinceMs || Date.now()));
-      const elapsedText = elapsedMs >= 60_000 ? fmtDur(elapsedMs) : `${(elapsedMs / 1000).toFixed(1)}s`;
+      const elapsedText = fmtTraceDur(elapsedMs);
       liveGenHtml = `
         <div class="tr-row generating">
           <div class="tr-left">
@@ -3223,7 +3223,7 @@
         bodyEl.innerHTML = kv([
           [t('td.start'), fmtIsoLocal(item.at)],
           [t('td.end'), fmtIsoLocal(item.endAt)],
-          [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms (${fmtDur(item.durationMs)})` : '—'],
+          [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms (${fmtTraceDur(item.durationMs)})` : '—'],
         ]);
       } else if (tab === 'args') {
         bodyEl.innerHTML = `
