@@ -1124,11 +1124,11 @@ function readPluginManifest() {
       : (typeof json.repository?.url === 'string' ? json.repository.url : '');
     return {
       name: String(json.name || 'agy-context'),
-      version: String(json.version || '1.0.0'),
+      version: String(json.version || '1.0.1'),
       repository: repo.replace(/^git\+/, '').replace(/\.git$/, '').trim(),
     };
   } catch {
-    return { name: 'agy-context', version: '1.0.0', repository: '' };
+    return { name: 'agy-context', version: '1.0.1', repository: '' };
   }
 }
 

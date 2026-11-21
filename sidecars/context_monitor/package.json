@@ -1,6 +1,6 @@
 {
   "name": "agy-context-monitor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Antigravity real-time session context monitor and global insights sidecar"
 }
