@@ -215,6 +215,11 @@ function readHookTimings(picked) {
 const sessionCache = new Map();
 const traceCache = new Map();
 
+function discoverKnownMcpServers(appData) {
+  if (!appData) return [];
+  return safeReaddir(join(appData, 'mcp')).filter((n) => n && !n.startsWith('.'));
+}
+
 function getParsedTrace(appData, convId) {
   if (!appData || !convId || !ID_RE.test(convId)) return null;
   const picked = pickTranscriptFile(appData, convId);
@@ -230,7 +235,7 @@ function getParsedTrace(appData, convId) {
   try { text = readFileSync(picked.path, 'utf-8'); } catch { return null; }
 
   const hookTimings = readHookTimings(timingFile);
-  const trace = parseTrace(text, { hookTimings });
+  const trace = parseTrace(text, { hookTimings, knownMcpServers: discoverKnownMcpServers(appData) });
   const entry = { key, ...trace };
   if (traceCache.size > 40) traceCache.clear();
   traceCache.set(convId, entry);
@@ -260,6 +265,7 @@ function getParsedSession(appData, convId) {
     workspaceUri: meta.workspaceUri,
     fileMtime: picked.stat.mtime,
     hookTimings,
+    knownMcpServers: discoverKnownMcpServers(appData),
   });
 
   if (sessionCache.size > 800) sessionCache.clear();
@@ -783,7 +789,18 @@ function buildOverview({ range = '30d', date = '', start = '', end = '', workspa
     }
 
     for (const [name, tv] of Object.entries(s.tools)) {
-      if (!toolsAgg[name]) toolsAgg[name] = { name, count: 0, lastAt: 0, tokens: 0, durationMs: 0, errors: 0 };
+      if (!toolsAgg[name]) {
+        toolsAgg[name] = {
+          name,
+          count: 0,
+          lastAt: 0,
+          tokens: 0,
+          durationMs: 0,
+          errors: 0,
+          kind: tv.kind || 'tool',
+          ...(tv.mcpServer ? { mcpServer: tv.mcpServer, mcpTool: tv.mcpTool || '', isMcpSchema: Boolean(tv.isMcpSchema) } : {}),
+        };
+      }
       toolsAgg[name].count += tv.count;
       toolsAgg[name].tokens += tv.tokens || 0;
       toolsAgg[name].durationMs += tv.durationMs || 0;
@@ -999,6 +1016,11 @@ function handleSession(data, defaultConvId) {
         hasReply: d.hasReply,
         toolName: d.toolName,
         skillName: d.skillName,
+        mcpServer: d.mcpServer || '',
+        mcpTool: d.mcpTool || '',
+        isMcpSchema: Boolean(d.isMcpSchema),
+        isCommand: Boolean(d.isCommand),
+        commandName: d.commandName || '',
         model: d.model,
         systemType: d.systemType,
         systemBadge: d.systemBadge,
@@ -1008,7 +1030,7 @@ function handleSession(data, defaultConvId) {
         preview: d.preview,
         argsPreview: d.argsPreview,
         resultPreview: d.resultPreview,
-        detailText: (d.kind === 'tool' || d.kind === 'skill')
+        detailText: (d.kind === 'tool' || d.kind === 'skill' || d.kind === 'mcp')
           ? `${JSON.stringify(d.args || {}, null, 2)}${d.result ? `\n\n--- Result ---\n${d.result.slice(0, 1200)}` : ''}`
           : d.kind === 'model'
             ? [d.thinking ? `[Thinking]\n${d.thinking.slice(0, 1200)}` : '', d.content ? `[Reply]\n${d.content.slice(0, 1200)}` : ''].filter(Boolean).join('\n\n')

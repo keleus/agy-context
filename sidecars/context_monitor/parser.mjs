@@ -183,6 +183,117 @@ export function extractSkillName(pathStr) {
   return m ? m[1] : null;
 }
 
+export function extractMcpSchemaInfo(pathStr) {
+  const p = unwrapArg(pathStr);
+  if (!p) return null;
+  const m = p.match(/(?:^|[/\\])(?:\.gemini[/\\][^/\\]+|antigravity)[/\\]mcp[/\\]([^/\\]+)[/\\]([^/\\]+)$/i);
+  if (!m) return null;
+  const server = m[1];
+  const fileName = m[2];
+  if (!/\.(json|md)$/i.test(fileName)) return null;
+  return { server, tool: fileName, isSchema: true, isResource: false, path: p };
+}
+
+export function extractMcpToolInfo(tc, knownServers = null) {
+  const rawName = String(tc?.name || '');
+  const args = tc?.args || {};
+
+  if (rawName === 'call_mcp_tool') {
+    const server = unwrapArg(args.ServerName ?? args.serverName ?? args.server_name ?? args.server ?? '').trim();
+    const tool = unwrapArg(args.ToolName ?? args.toolName ?? args.tool_name ?? args.tool ?? '').trim();
+    return {
+      server: server || 'mcp',
+      tool: tool || 'call_mcp_tool',
+      isSchema: false,
+      isResource: false,
+    };
+  }
+
+  if (rawName === 'list_resources' || rawName === 'read_resource' || rawName === 'list_resource_templates') {
+    const server = unwrapArg(args.ServerName ?? args.serverName ?? args.server_name ?? args.server ?? '').trim();
+    return {
+      server: server || 'mcp',
+      tool: rawName,
+      isSchema: false,
+      isResource: true,
+    };
+  }
+
+  if (rawName === 'read_file' || rawName === 'view_file') {
+    const p = unwrapArg(args.Path || args.AbsolutePath || '');
+    if (p && !extractSkillName(p)) {
+      return extractMcpSchemaInfo(p);
+    }
+    return null;
+  }
+
+  if (rawName.startsWith('mcp__')) {
+    const rest = rawName.slice(5);
+    const sep = rest.indexOf('__');
+    if (sep > 0 && sep + 2 < rest.length) {
+      return {
+        server: rest.slice(0, sep),
+        tool: rest.slice(sep + 2),
+        isSchema: false,
+        isResource: false,
+      };
+    }
+  }
+
+  if (rawName.startsWith('mcp_')) {
+    const rest = rawName.slice(4);
+    if (knownServers && knownServers.size > 0) {
+      const sorted = [...knownServers].filter(Boolean).sort((a, b) => b.length - a.length);
+      for (const srv of sorted) {
+        if (rest.startsWith(`${srv}_`) && rest.length > srv.length + 1) {
+          return {
+            server: srv,
+            tool: rest.slice(srv.length + 1),
+            isSchema: false,
+            isResource: false,
+          };
+        }
+      }
+    }
+    const sep = rest.indexOf('_');
+    if (sep > 0 && sep + 1 < rest.length) {
+      return {
+        server: rest.slice(0, sep),
+        tool: rest.slice(sep + 1),
+        isSchema: false,
+        isResource: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+function collectKnownMcpServers(steps, extraServers = null) {
+  const servers = new Set();
+  if (extraServers) {
+    for (const s of extraServers) {
+      const clean = String(s || '').trim();
+      if (clean) servers.add(clean);
+    }
+  }
+  for (const st of steps) {
+    if (!Array.isArray(st?.tool_calls)) continue;
+    for (const tc of st.tool_calls) {
+      const n = String(tc?.name || '');
+      const args = tc?.args || {};
+      if (n === 'call_mcp_tool' || n === 'list_resources' || n === 'read_resource' || n === 'list_resource_templates') {
+        const srv = unwrapArg(args.ServerName ?? args.serverName ?? args.server_name ?? args.server ?? '').trim();
+        if (srv) servers.add(srv);
+      } else if (n === 'read_file' || n === 'view_file') {
+        const schema = extractMcpSchemaInfo(args.Path || args.AbsolutePath || '');
+        if (schema?.server) servers.add(schema.server);
+      }
+    }
+  }
+  return servers;
+}
+
 export function extractCommands(cmdLine) {
   const raw = unwrapArg(cmdLine);
   if (!raw) return [];
@@ -214,6 +325,106 @@ export function extractCommands(cmdLine) {
     }
   }
   return out;
+}
+
+export function extractPrimaryCommand(cmdLine) {
+  const cmds = extractCommands(cmdLine);
+  if (cmds.length) return cmds[0];
+  const raw = unwrapArg(cmdLine);
+  if (!raw) return 'shell';
+  const cleaned = raw
+    .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?(?:\n\1(?:\s|$)|$)/g, ' ')
+    .replace(/'[^']*'/g, "''")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""');
+  const segments = cleaned.split(/(?:\|\||&&|[|;\n])/);
+  let fallback = '';
+  for (const seg of segments) {
+    const tokens = seg.trim().split(/\s+/).filter(Boolean);
+    let idx = 0;
+    while (idx < tokens.length) {
+      const tok = tokens[idx].replace(/^['"`(]+|['"`)]+$/g, '');
+      if (!tok) { idx++; continue; }
+      if (tok.startsWith('#') || tok.startsWith('-')) break;
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(tok)) { idx++; continue; }
+      if (/^(?:\d?>|>>|<|2>&1)/.test(tok)) { idx += 2; continue; }
+      const base = tok.includes('/') ? tok.split('/').pop() : tok;
+      if (!base || !/^[A-Za-z][A-Za-z0-9._-]*$/.test(base)) break;
+      if (SHELL_WRAPPERS.has(base)) {
+        idx++;
+        while (idx < tokens.length && (/^-/.test(tokens[idx]) || /^\d+[smh]?$/.test(tokens[idx]))) idx++;
+        continue;
+      }
+      if (base !== 'cd') return base;
+      if (!fallback) fallback = base;
+      break;
+    }
+  }
+  return fallback || 'shell';
+}
+
+function resolveToolIdentity(tc, knownServers = null) {
+  const rawName = String(tc?.name || 'unknown');
+  const args = tc?.args || {};
+  const skillName = (rawName === 'read_file' || rawName === 'view_file')
+    ? extractSkillName(args.Path || args.AbsolutePath)
+    : null;
+  if (skillName) {
+    return {
+      rawName,
+      key: rawName,
+      kind: 'skill',
+      skillName,
+      isMcp: false,
+      mcpServer: '',
+      mcpTool: '',
+      isMcpSchema: false,
+      isCommand: false,
+      commandName: '',
+    };
+  }
+  const mcp = extractMcpToolInfo(tc, knownServers);
+  if (mcp) {
+    return {
+      rawName,
+      key: `${mcp.server}/${mcp.tool}`,
+      kind: 'mcp',
+      skillName: null,
+      isMcp: true,
+      mcpServer: mcp.server,
+      mcpTool: mcp.tool,
+      isMcpSchema: Boolean(mcp.isSchema),
+      isCommand: false,
+      commandName: '',
+      path: mcp.path || '',
+    };
+  }
+  if (rawName === 'run_command') {
+    const primaryCmd = extractPrimaryCommand(args.CommandLine);
+    return {
+      rawName,
+      key: primaryCmd,
+      kind: 'command',
+      skillName: null,
+      isMcp: false,
+      mcpServer: '',
+      mcpTool: '',
+      isMcpSchema: false,
+      isCommand: true,
+      commandName: primaryCmd,
+    };
+  }
+  return {
+    rawName,
+    key: rawName,
+    kind: 'tool',
+    skillName: null,
+    isMcp: false,
+    mcpServer: '',
+    mcpTool: '',
+    isMcpSchema: false,
+    isCommand: false,
+    commandName: '',
+  };
 }
 
 export function inferWorkspace(steps) {
@@ -327,19 +538,77 @@ function shortenPath(p) {
   return parts.slice(-2).join('/');
 }
 
-function describeToolItem(tc) {
+function distributeProportional(entries, targetTotal) {
+  if (!entries.length) return [];
+  const rawSum = entries.reduce((a, x) => a + Math.max(0, x.rawTokens || 0), 0);
+  const target = targetTotal > 0 ? targetTotal : rawSum;
+  if (target <= 0 || rawSum <= 0) {
+    return entries.map(() => 0);
+  }
+  const exact = entries.map((x) => (Math.max(0, x.rawTokens || 0) / rawSum) * target);
+  const floors = exact.map((v) => Math.floor(v));
+  let remainder = target - floors.reduce((a, v) => a + v, 0);
+  const order = exact
+    .map((v, i) => ({ i, frac: v - floors[i], raw: entries[i].rawTokens || 0 }))
+    .sort((a, b) => b.frac - a.frac || b.raw - a.raw);
+  for (let k = 0; k < order.length && remainder > 0; k++) {
+    floors[order[k].i] += 1;
+    remainder -= 1;
+  }
+  return floors;
+}
+
+function describeToolItem(tc, knownServers = null) {
   const name = tc?.name || 'tool';
   const args = tc?.args || {};
+  const id = resolveToolIdentity(tc, knownServers);
+
+  if (id.skillName) {
+    const path = unwrapArg(args.Path || args.AbsolutePath || '');
+    return { label: id.skillName, detail: path, category: 'skill_injection', tool: 'skill', path };
+  }
+  if (id.isMcp) {
+    const rawMcpArgs = args.Arguments ?? args.arguments;
+    const mcpArgsPreview = rawMcpArgs == null
+      ? ''
+      : (typeof rawMcpArgs === 'string'
+          ? unwrapArg(rawMcpArgs)
+          : compactArgsPreview(cleanArgsObject(rawMcpArgs)));
+    const detail = id.isMcpSchema
+      ? (id.path || '')
+      : (name === 'call_mcp_tool'
+          ? mcpArgsPreview
+          : name === 'read_resource'
+            ? unwrapArg(args.Uri || args.uri || '')
+            : '');
+    return {
+      label: id.mcpTool,
+      detail: detail.slice(0, 220),
+      category: 'tool_calls',
+      tool: id.key,
+      isMcp: true,
+      mcpServer: id.mcpServer,
+      mcpTool: id.mcpTool,
+      isMcpSchema: id.isMcpSchema,
+      path: id.path || '',
+    };
+  }
   if (name === 'read_file' || name === 'view_file') {
     const path = unwrapArg(args.Path || args.AbsolutePath || '');
-    const skill = extractSkillName(path);
-    if (skill) return { label: skill, detail: path, category: 'skill_injection', tool: 'skill', path };
     return { label: shortenPath(path) || 'file', detail: path, category: 'tool_calls', tool: name, path };
   }
   if (name === 'run_command') {
     const summary = unwrapArg(args.toolSummary || '');
     const cmd = unwrapArg(args.CommandLine || '').replace(/\s+/g, ' ').trim();
-    return { label: summary || cmd.slice(0, 60) || 'command', detail: cmd.slice(0, 220), category: 'tool_calls', tool: name, cmd };
+    return {
+      label: summary || cmd.slice(0, 60) || id.commandName,
+      detail: cmd.slice(0, 220),
+      category: 'tool_calls',
+      tool: id.commandName,
+      isCommand: true,
+      commandName: id.commandName,
+      cmd,
+    };
   }
   if (name === 'search_web') {
     const q = unwrapArg(args.query || '').trim();
@@ -644,7 +913,7 @@ export function summarizeHookTelemetry(hookTimings, nowMs = Date.now(), { steps 
 /**
  * Parses a transcript JSONL string into a rich, structured session summary.
  */
-export function parseTranscript(text, { conversationId = '', title = '', workspace = '', workspaceUri = '', fileMtime = 0, hookTimings = null, nowMs = Date.now() } = {}) {
+export function parseTranscript(text, { conversationId = '', title = '', workspace = '', workspaceUri = '', fileMtime = 0, hookTimings = null, knownMcpServers = null, nowMs = Date.now() } = {}) {
   const hookIntervals = buildHookIntervals(hookTimings);
   const hookErrorSteps = new Set();
   const hookPostToolTs = new Map();
@@ -704,6 +973,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     || (firstUserText ? firstUserText.replace(/\s+/g, ' ').slice(0, 60) : '')
     || `Session ${conversationId.slice(0, 8)}`;
   const resolvedWorkspace = workspace || inferWorkspace(steps);
+  const knownServers = collectKnownMcpServers(steps, knownMcpServers);
 
   // Composition & cumulative accumulators
   const currentBuckets = emptyBuckets();
@@ -957,6 +1227,8 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     for (let tcIdx = 0; tcIdx < tcs.length; tcIdx++) {
       const tc = tcs[tcIdx];
       const tName = String(tc?.name || 'unknown');
+      const id = resolveToolIdentity(tc, knownServers);
+      const toolKey = id.key;
       const matchedResult = childGenerics[tcIdx] || null;
       const resultMs = matchedResult ? parseMs(matchedResult.created_at) : NaN;
       let tcDurMs = parseResultDurationMs(matchedResult?.content);
@@ -973,13 +1245,23 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         }
       }
 
-      if (!tools[tName]) tools[tName] = { count: 0, lastAt: 0, tokens: 0, durationMs: 0, errors: 0 };
-      tools[tName].count += 1;
-      tools[tName].durationMs += tcDurMs;
-      if (safePMs > tools[tName].lastAt) tools[tName].lastAt = safePMs;
+      if (!tools[toolKey]) {
+        tools[toolKey] = {
+          count: 0,
+          lastAt: 0,
+          tokens: 0,
+          durationMs: 0,
+          errors: 0,
+          kind: id.isMcp ? 'mcp' : (id.isCommand ? 'command' : 'tool'),
+          ...(id.isMcp ? { mcpServer: id.mcpServer, mcpTool: id.mcpTool, isMcpSchema: id.isMcpSchema } : {}),
+        };
+      }
+      tools[toolKey].count += 1;
+      tools[toolKey].durationMs += tcDurMs;
+      if (safePMs > tools[toolKey].lastAt) tools[toolKey].lastAt = safePMs;
 
       const args = tc?.args || {};
-      const skillName = (tName === 'read_file' || tName === 'view_file') ? extractSkillName(args.Path || args.AbsolutePath) : null;
+      const skillName = id.skillName;
       if (skillName) {
         if (!skills[skillName]) skills[skillName] = { count: 0, lastAt: 0, tokens: 0, durationMs: 0 };
         skills[skillName].count += 1;
@@ -989,7 +1271,7 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
 
       if (tName === 'read_file' || tName === 'view_file') {
         const p = args.Path || args.AbsolutePath;
-        if (p && !skillName) recordFileTouch(p, 'read', 0, pStep.step_index ?? pIdx, pStep.created_at || '', safePMs);
+        if (p && !skillName && !id.isMcpSchema) recordFileTouch(p, 'read', 0, pStep.step_index ?? pIdx, pStep.created_at || '', safePMs);
       } else if (tName === 'edit_file') {
         if (args.Path) recordFileTouch(args.Path, 'edit', 0, pStep.step_index ?? pIdx, pStep.created_at || '', safePMs);
       } else if (tName === 'write_file') {
@@ -1283,18 +1565,19 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
           genericIdx++;
           const w = estimateTokens(st.content || '') + estimateMediaTokens(st.media);
           const desc = matchedTc
-            ? describeToolItem(matchedTc)
+            ? describeToolItem(matchedTc, knownServers)
             : { label: 'Tool output', detail: '', category: 'tool_calls', tool: 'tool' };
           weights[desc.category] += w;
-          const tName = matchedTc?.name || null;
+          const resolvedId = matchedTc ? resolveToolIdentity(matchedTc, knownServers) : null;
+          const resolvedToolKey = resolvedId?.key || null;
           const isFailed = commandFailedFromOutput(st)
             || (Number.isFinite(st.step_index) && hookErrorSteps.has(st.step_index));
-          if (isFailed && tName && tools[tName]) {
-            tools[tName].errors += 1;
+          if (isFailed && resolvedToolKey && tools[resolvedToolKey]) {
+            tools[resolvedToolKey].errors += 1;
           }
           stepItems.push({
             ...desc,
-            skillName: matchedTc ? extractSkillName(matchedTc?.args?.Path || matchedTc?.args?.AbsolutePath) : null,
+            skillName: resolvedId?.skillName || null,
             weight: w,
             step: st.step_index ?? j,
             at: st.created_at || '',
@@ -1358,6 +1641,12 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
               label: item.label,
               detail: item.detail,
               tool: item.tool,
+              isMcp: Boolean(item.isMcp),
+              mcpServer: item.mcpServer || '',
+              mcpTool: item.mcpTool || '',
+              isMcpSchema: Boolean(item.isMcpSchema),
+              isCommand: Boolean(item.isCommand),
+              commandName: item.commandName || '',
               tokens: tok,
               itemCount: item.itemCount || 1,
               step: item.step,
@@ -1573,26 +1862,205 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
     categoryItems.skill_injection = merged;
   }
 
-  // Merge tool_calls by (tool name, success/error) so failed calls are tallied on their own row
+  // Merge tool_calls:
+  //   - MCP calls & schema reads group into Level-2 MCP Server rows with expandable Level-3 tool rows
+  //   - Shell commands (run_command) group into a Level-2 Commands row with expandable Level-3 concrete command rows
+  //   - Regular built-in tools group by (tool name, success/error)
   if (categoryItems.tool_calls.length > 0) {
-    const grouped = new Map();
+    const regularGrouped = new Map();
+    const mcpServers = new Map();
+    let cmdGroup = null;
     let rawSum = 0;
+
     for (const it of categoryItems.tool_calls) {
-      const toolName = String(it.tool || it.label || 'tool');
-      const isErr = it.status === 'ERROR';
-      const key = `${toolName}:${isErr ? 'err' : 'ok'}`;
       const tok = Math.max(0, it.tokens || 0);
       rawSum += tok;
-      if (!grouped.has(key)) {
-        grouped.set(key, { label: toolName, tool: toolName, failed: isErr, count: 0, rawTokens: 0, samples: [] });
+      const isErr = it.status === 'ERROR';
+
+      if (it.isMcp) {
+        const srv = String(it.mcpServer || 'mcp');
+        const mTool = String(it.mcpTool || it.label || 'tool');
+        if (!mcpServers.has(srv)) {
+          mcpServers.set(srv, {
+            server: srv,
+            count: 0,
+            failedCount: 0,
+            rawTokens: 0,
+            tools: new Map(),
+          });
+        }
+        const srvRec = mcpServers.get(srv);
+        srvRec.count += 1;
+        if (isErr) srvRec.failedCount += 1;
+        srvRec.rawTokens += tok;
+
+        const childKey = `${mTool}:${it.isMcpSchema ? 'schema' : 'call'}:${isErr ? 'err' : 'ok'}`;
+        if (!srvRec.tools.has(childKey)) {
+          srvRec.tools.set(childKey, {
+            label: mTool,
+            tool: `${srv}/${mTool}`,
+            mcpServer: srv,
+            mcpTool: mTool,
+            isMcp: true,
+            isMcpSchema: Boolean(it.isMcpSchema),
+            failed: isErr,
+            count: 0,
+            rawTokens: 0,
+            samples: [],
+          });
+        }
+        const ch = srvRec.tools.get(childKey);
+        ch.count += 1;
+        ch.rawTokens += tok;
+        if (it.detail || it.label) ch.samples.push({ label: it.detail || it.label, tokens: tok, step: it.step || 0 });
+      } else if (it.isCommand) {
+        const cmdName = String(it.commandName || it.tool || 'shell');
+        if (!cmdGroup) {
+          cmdGroup = {
+            count: 0,
+            failedCount: 0,
+            rawTokens: 0,
+            commands: new Map(),
+          };
+        }
+        cmdGroup.count += 1;
+        if (isErr) cmdGroup.failedCount += 1;
+        cmdGroup.rawTokens += tok;
+
+        const childKey = `${cmdName}:${isErr ? 'err' : 'ok'}`;
+        if (!cmdGroup.commands.has(childKey)) {
+          cmdGroup.commands.set(childKey, {
+            label: cmdName,
+            tool: cmdName,
+            commandName: cmdName,
+            isCommand: true,
+            failed: isErr,
+            count: 0,
+            rawTokens: 0,
+            samples: [],
+          });
+        }
+        const ch = cmdGroup.commands.get(childKey);
+        ch.count += 1;
+        ch.rawTokens += tok;
+        if (it.detail || it.label) ch.samples.push({ label: it.detail || it.label, tokens: tok, step: it.step || 0 });
+      } else {
+        const toolName = String(it.tool || it.label || 'tool');
+        const key = `tool:${toolName}:${isErr ? 'err' : 'ok'}`;
+        if (!regularGrouped.has(key)) {
+          regularGrouped.set(key, {
+            label: toolName,
+            tool: toolName,
+            failed: isErr,
+            count: 0,
+            rawTokens: 0,
+            samples: [],
+          });
+        }
+        const rec = regularGrouped.get(key);
+        rec.count += 1;
+        rec.rawTokens += tok;
+        if (it.label) rec.samples.push({ label: it.label, tokens: tok, step: it.step || 0 });
       }
-      const rec = grouped.get(key);
-      rec.count += 1;
-      rec.rawTokens += tok;
-      if (it.label) rec.samples.push({ label: it.label, tokens: tok, step: it.step || 0 });
     }
+
+    const level2Entries = [
+      ...[...mcpServers.values()].map((srv) => ({ kind: 'mcp', rec: srv, rawTokens: srv.rawTokens })),
+      ...(cmdGroup ? [{ kind: 'cmd', rec: cmdGroup, rawTokens: cmdGroup.rawTokens }] : []),
+      ...[...regularGrouped.values()].map((rec) => ({ kind: 'regular', rec, rawTokens: rec.rawTokens })),
+    ];
     const targetTools = currentBuckets.tool_calls || rawSum;
-    const merged = [...grouped.values()].map((rec) => {
+    const allocL2 = distributeProportional(level2Entries, targetTools);
+
+    const merged = level2Entries.map((entry, idx) => {
+      const tokens = allocL2[idx] || 0;
+      if (entry.kind === 'mcp') {
+        const srv = entry.rec;
+        const childList = [...srv.tools.values()];
+        const allocL3 = distributeProportional(childList, tokens);
+        const children = childList.map((ch, cIdx) => {
+          const topSamples = ch.samples
+            .sort((a, b) => b.tokens - a.tokens)
+            .slice(0, 6)
+            .map((s) => `${s.step ? `#${s.step} ` : ''}${s.label}`)
+            .join('\n');
+          return {
+            label: ch.label,
+            tool: ch.tool,
+            isMcp: true,
+            mcpServer: ch.mcpServer,
+            mcpTool: ch.mcpTool,
+            isMcpSchema: ch.isMcpSchema,
+            count: ch.count,
+            failed: ch.failed,
+            status: ch.failed ? 'ERROR' : 'DONE',
+            tokens: allocL3[cIdx] || 0,
+            detail: topSamples,
+            step: 0,
+          };
+        }).sort((a, b) => b.tokens - a.tokens || b.count - a.count);
+
+        const allFailed = srv.failedCount > 0 && srv.failedCount === srv.count;
+        return {
+          label: srv.server,
+          tool: srv.server,
+          isMcp: true,
+          mcpServer: srv.server,
+          count: srv.count,
+          toolCount: children.length,
+          failedCount: srv.failedCount,
+          failed: allFailed,
+          status: allFailed ? 'ERROR' : 'DONE',
+          tokens,
+          children,
+          detail: '',
+          step: 0,
+        };
+      }
+
+      if (entry.kind === 'cmd') {
+        const grp = entry.rec;
+        const childList = [...grp.commands.values()];
+        const allocL3 = distributeProportional(childList, tokens);
+        const children = childList.map((ch, cIdx) => {
+          const topSamples = ch.samples
+            .sort((a, b) => b.tokens - a.tokens)
+            .slice(0, 6)
+            .map((s) => `${s.step ? `#${s.step} ` : ''}${s.label}`)
+            .join('\n');
+          return {
+            label: ch.label,
+            tool: ch.tool,
+            isCommand: true,
+            commandName: ch.commandName,
+            count: ch.count,
+            failed: ch.failed,
+            status: ch.failed ? 'ERROR' : 'DONE',
+            tokens: allocL3[cIdx] || 0,
+            detail: topSamples,
+            step: 0,
+          };
+        }).sort((a, b) => b.tokens - a.tokens || b.count - a.count);
+
+        const allFailed = grp.failedCount > 0 && grp.failedCount === grp.count;
+        return {
+          label: 'Commands',
+          tool: 'commands',
+          isCommand: true,
+          isCommandGroup: true,
+          count: grp.count,
+          toolCount: children.length,
+          failedCount: grp.failedCount,
+          failed: allFailed,
+          status: allFailed ? 'ERROR' : 'DONE',
+          tokens,
+          children,
+          detail: '',
+          step: 0,
+        };
+      }
+
+      const rec = entry.rec;
       const topSamples = rec.samples
         .sort((a, b) => b.tokens - a.tokens)
         .slice(0, 6)
@@ -1604,12 +2072,12 @@ export function parseTranscript(text, { conversationId = '', title = '', workspa
         count: rec.count,
         failed: rec.failed,
         status: rec.failed ? 'ERROR' : 'DONE',
-        tokens: rawSum > 0 ? Math.max(1, Math.round((rec.rawTokens / rawSum) * targetTools)) : 0,
+        tokens,
         detail: topSamples,
         step: 0,
       };
     });
-    merged.sort((a, b) => b.tokens - a.tokens);
+    merged.sort((a, b) => b.tokens - a.tokens || b.count - a.count);
     categoryItems.tool_calls = merged;
   }
 
@@ -1896,7 +2364,7 @@ function detectSystemBadges(tag, text) {
  *   - summary items (lightweight list for fast rendering even on 2000+ step sessions)
  *   - detail records (full args, thinking, reply, tool output, timestamps)
  */
-export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}) {
+export function parseTrace(text, { hookTimings = null, knownMcpServers = null, nowMs = Date.now() } = {}) {
   const hookIntervals = buildHookIntervals(hookTimings);
   const postToolsByStep = new Map();
   if (Array.isArray(hookTimings)) {
@@ -1919,6 +2387,7 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
       // Ignore torn trailing line
     }
   }
+  const knownServers = collectKnownMcpServers(steps, knownMcpServers);
 
   // Detect reverted/overwritten branches in append-only transcript logs:
   // When the user reverts to step_index K, subsequent lines reuse step_index >= K.
@@ -1928,7 +2397,7 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
 
   const items = [];
   const details = [];
-  const counts = { total: 0, input: 0, system: 0, skill: 0, model: 0, tool: 0, error: 0 };
+  const counts = { total: 0, input: 0, system: 0, skill: 0, mcp: 0, model: 0, tool: 0, error: 0 };
   const MAX_DETAIL_CHARS = 64 * 1024;
   let turn = 0;
   let prevPromptTokens = 0;
@@ -1941,6 +2410,7 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
     if (summary.kind === 'input') counts.input++;
     else if (summary.kind === 'system') counts.system++;
     else if (summary.kind === 'skill') counts.skill++;
+    else if (summary.kind === 'mcp') counts.mcp++;
     else if (summary.kind === 'model') counts.model++;
     else if (summary.kind === 'tool') counts.tool++;
     if (summary.hasError) counts.error++;
@@ -2105,10 +2575,21 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
           toolCalls: tcs.map((tc) => {
             const cleanArgs = cleanArgsObject(tc?.args);
             const tcName = tc?.name || 'tool';
-            const sk = (tcName === 'read_file' || tcName === 'view_file')
-              ? extractSkillName(cleanArgs.Path || cleanArgs.AbsolutePath)
-              : null;
-            return { name: sk || tcName, rawToolName: tcName, isSkill: Boolean(sk), args: cleanArgs };
+            const id = resolveToolIdentity(tc, knownServers);
+            const displayName = id.skillName
+              || (id.isMcp ? `${id.mcpServer} / ${id.mcpTool}` : (id.isCommand ? id.commandName : tcName));
+            return {
+              name: displayName,
+              rawToolName: tcName,
+              isSkill: Boolean(id.skillName),
+              isMcp: id.isMcp,
+              mcpServer: id.mcpServer,
+              mcpTool: id.mcpTool,
+              isMcpSchema: id.isMcpSchema,
+              isCommand: id.isCommand,
+              commandName: id.commandName,
+              args: cleanArgs,
+            };
           }),
           childToolIdxs: [],
         },
@@ -2123,9 +2604,8 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
         const resStep = resWrap?.stepObj || null;
         const cleanArgs = cleanArgsObject(tc?.args);
         const toolName = String(tc?.name || 'tool');
-        const skillName = (toolName === 'read_file' || toolName === 'view_file')
-          ? extractSkillName(cleanArgs.Path || cleanArgs.AbsolutePath)
-          : null;
+        const id = resolveToolIdentity(tc, knownServers);
+        const skillName = id.skillName;
         const resStartMs = resStep ? parseMs(resStep.created_at) : NaN;
         let resNextMs = j + 1 < childGenerics.length
           ? parseMs(childGenerics[j + 1].stepObj.created_at)
@@ -2152,9 +2632,39 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
         }
         const rawOut = String(resStep?.content || '');
         const failed = Boolean(hookError) || commandFailedFromOutput(resStep);
+
+        let argsPreview = '';
+        if (skillName) {
+          argsPreview = skillName;
+        } else if (id.isMcp) {
+          if (id.isMcpSchema) {
+            argsPreview = shortenPath(cleanArgs.Path || cleanArgs.AbsolutePath || id.mcpTool);
+          } else if (toolName === 'call_mcp_tool') {
+            const innerArgs = cleanArgs.Arguments ?? cleanArgs.arguments;
+            if (typeof innerArgs === 'string') {
+              const trimmed = innerArgs.trim();
+              argsPreview = trimmed.length > 140 ? `${trimmed.slice(0, 140)}…` : trimmed;
+            } else if (innerArgs != null && (typeof innerArgs !== 'object' || Object.keys(innerArgs).length > 0)) {
+              argsPreview = compactArgsPreview(innerArgs);
+            } else {
+              argsPreview = '';
+            }
+          } else if (toolName === 'read_resource') {
+            argsPreview = String(cleanArgs.Uri || cleanArgs.uri || '').slice(0, 140);
+          } else if (toolName === 'list_resources' || toolName === 'list_resource_templates') {
+            argsPreview = '';
+          } else {
+            argsPreview = compactArgsPreview(cleanArgs);
+          }
+        } else if (id.isCommand) {
+          argsPreview = String(cleanArgs.CommandLine || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+        } else {
+          argsPreview = compactArgsPreview(cleanArgs);
+        }
+
         const childIdx = pushEntry(
           {
-            kind: skillName ? 'skill' : 'tool',
+            kind: skillName ? 'skill' : (id.isMcp ? 'mcp' : 'tool'),
             turn,
             step: resStep?.step_index ?? (st.step_index ?? i),
             callStep: st.step_index ?? i,
@@ -2167,7 +2677,12 @@ export function parseTrace(text, { hookTimings = null, nowMs = Date.now() } = {}
             reverted: Boolean(revertedFlags[resWrap?.rawIdx ?? i]) || isReverted,
             toolName,
             skillName: skillName || '',
-            argsPreview: skillName ? skillName : compactArgsPreview(cleanArgs),
+            mcpServer: id.mcpServer || '',
+            mcpTool: id.mcpTool || '',
+            isMcpSchema: Boolean(id.isMcpSchema),
+            isCommand: Boolean(id.isCommand),
+            commandName: id.commandName || '',
+            argsPreview,
             resultPreview: hookError ? `[ERROR] ${hookError}` : compactResultPreview(rawOut),
           },
           {

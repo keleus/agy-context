@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import {
   CATEGORIES,
   extractCommands,
+  extractMcpSchemaInfo,
+  extractMcpToolInfo,
+  extractPrimaryCommand,
   extractSkillName,
   parseTrace,
   parseTranscript,
@@ -159,8 +162,11 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(parsed.categoryItems.skill_injection[0].tool, 'skill');
   assert.equal(parsed.categoryItems.skill_injection[0].count, 1);
   assert.equal(parsed.categoryItems.tool_calls.length, 1);
-  assert.equal(parsed.categoryItems.tool_calls[0].label, 'run_command');
+  assert.equal(parsed.categoryItems.tool_calls[0].isCommandGroup, true);
   assert.equal(parsed.categoryItems.tool_calls[0].count, 1);
+  assert.equal(parsed.categoryItems.tool_calls[0].children.length, 1);
+  assert.equal(parsed.categoryItems.tool_calls[0].children[0].label, 'git');
+  assert.equal(parsed.categoryItems.tool_calls[0].children[0].isCommand, true);
   assert.equal(parsed.commandLog.length, 1);
   assert.equal(parsed.commandLog[0].failed, false);
   assert.ok(parsed.timeline[0].buckets);
@@ -502,6 +508,180 @@ import { buildUsageSeries } from '../sidecars/context_monitor/main.mjs';
   assert.equal(revTrace.items[2].reverted, true);  // old step 2 reverted
   assert.equal(revTrace.items[3].reverted, false); // new step 1 active
   assert.equal(revTrace.items[4].reverted, false); // new step 2 active
+}
+
+// 5b. MCP & direct command classification in tool_calls, tools, and parseTrace
+{
+  // Unit helpers
+  assert.deepEqual(
+    extractMcpSchemaInfo('/Users/dev/.gemini/antigravity/mcp/magpie/chrome-devtools__click.json'),
+    {
+      server: 'magpie',
+      tool: 'chrome-devtools__click.json',
+      isSchema: true,
+      isResource: false,
+      path: '/Users/dev/.gemini/antigravity/mcp/magpie/chrome-devtools__click.json',
+    },
+  );
+  assert.equal(extractMcpSchemaInfo('"/Users/dev/.gemini/antigravity/mcp/magpie/instructions.md"')?.tool, 'instructions.md');
+  assert.equal(extractMcpSchemaInfo('/Users/dev/git/my-app/mcp/server/config.json'), null);
+
+  assert.deepEqual(
+    extractMcpToolInfo({
+      name: 'call_mcp_tool',
+      args: { ServerName: '"magpie"', ToolName: '"run_code"', Arguments: { code: '1+1' } },
+    }),
+    { server: 'magpie', tool: 'run_code', isSchema: false, isResource: false },
+  );
+  assert.deepEqual(
+    extractMcpToolInfo(
+      { name: 'mcp_google_docs_read_doc', args: {} },
+      new Set(['google_docs', 'magpie']),
+    ),
+    { server: 'google_docs', tool: 'read_doc', isSchema: false, isResource: false },
+  );
+  assert.deepEqual(
+    extractMcpToolInfo({ name: 'mcp__figma__get_design', args: {} }),
+    { server: 'figma', tool: 'get_design', isSchema: false, isResource: false },
+  );
+  assert.deepEqual(
+    extractMcpToolInfo({ name: 'read_resource', args: { ServerName: 'notion', Uri: 'notion://page/1' } }),
+    { server: 'notion', tool: 'read_resource', isSchema: false, isResource: true },
+  );
+
+  assert.equal(extractPrimaryCommand('cd /tmp && npm test'), 'npm');
+  assert.equal(extractPrimaryCommand('FOO=1 sudo env -i python3 app.py'), 'python3');
+  assert.equal(extractPrimaryCommand('cd /tmp && echo hello'), 'echo');
+  assert.equal(extractPrimaryCommand('cd /tmp'), 'cd');
+
+  const mcpLines = [
+    {
+      step_index: 0,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:00Z',
+      content: '<USER_REQUEST>\nInspect page via MCP and run tests\n</USER_REQUEST>',
+    },
+    {
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:01Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 5000,
+      cache_read_tokens: 0,
+      output_tokens: 300,
+      tool_calls: [
+        { name: 'read_file', args: { Path: '/Users/dev/.gemini/antigravity/mcp/magpie/run_code.json' } },
+        { name: 'call_mcp_tool', args: { ServerName: 'magpie', ToolName: 'run_code', Arguments: { code: 'return 42' } } },
+        { name: 'call_mcp_tool', args: { ServerName: 'magpie', ToolName: 'chrome-devtools__click', Arguments: { uid: '1_2' } } },
+        { name: 'mcp_google_docs_read_doc', args: { id: 'doc-1' } },
+        { name: 'run_command', args: { CommandLine: 'npm test', toolSummary: 'Run tests' } },
+        { name: 'run_command', args: { CommandLine: 'git status', toolSummary: 'Git status' } },
+        { name: 'read_file', args: { Path: '/Users/dev/git/my-app/src/index.js' } },
+      ],
+    },
+    { step_index: 2, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:02Z', content: 's'.repeat(1200) },
+    { step_index: 3, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:03Z', content: 'r'.repeat(4000) },
+    { step_index: 4, source: 'MODEL', type: 'GENERIC', status: 'ERROR', created_at: '2026-11-21T10:00:04Z', content: 'element not found' },
+    { step_index: 5, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:05Z', content: 'd'.repeat(2400) },
+    { step_index: 6, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:06Z', content: 't'.repeat(2000) },
+    { step_index: 7, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:07Z', content: 'Command exited with code 1\nfatal: not a git repo' },
+    { step_index: 8, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:08Z', content: 'f'.repeat(1600) },
+    {
+      step_index: 9,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:10Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 4000,
+      cache_read_tokens: 5000,
+      output_tokens: 200,
+      content: 'Done!',
+    },
+  ];
+  const rawMcp = mcpLines.map((x) => JSON.stringify(x)).join('\n');
+  const parsedMcp = parseTranscript(rawMcp, {
+    conversationId: 'test-mcp-breakdown',
+    knownMcpServers: ['google_docs', 'magpie'],
+  });
+
+  // Exact composition sum
+  const compSum = CATEGORIES.reduce((a, k) => a + parsedMcp.composition[k], 0);
+  assert.equal(compSum, parsedMcp.currentContext);
+
+  // tool_calls has Level-2 MCP servers (magpie, google_docs), Level-2 Commands group, and read_file
+  const tcItems = parsedMcp.categoryItems.tool_calls;
+  const magpieRow = tcItems.find((x) => x.isMcp && x.mcpServer === 'magpie');
+  const gdocsRow = tcItems.find((x) => x.isMcp && x.mcpServer === 'google_docs');
+  const cmdGroupRow = tcItems.find((x) => x.isCommandGroup);
+  const readRow = tcItems.find((x) => !x.isMcp && !x.isCommand && x.label === 'read_file');
+  assert.ok(magpieRow);
+  assert.ok(gdocsRow);
+  assert.ok(cmdGroupRow);
+  assert.ok(readRow);
+  assert.ok(!tcItems.some((x) => x.label === 'run_command' || x.label === 'call_mcp_tool'));
+
+  // Level-3 children under Commands include npm (ok) and git (failed), summing to cmdGroupRow.tokens
+  assert.equal(cmdGroupRow.count, 2);
+  assert.equal(cmdGroupRow.failedCount, 1);
+  assert.equal(cmdGroupRow.children.length, 2);
+  assert.equal(cmdGroupRow.children.reduce((a, c) => a + c.tokens, 0), cmdGroupRow.tokens);
+  const npmChild = cmdGroupRow.children.find((c) => c.commandName === 'npm');
+  const gitChild = cmdGroupRow.children.find((c) => c.commandName === 'git');
+  assert.equal(npmChild?.failed, false);
+  assert.equal(gitChild?.failed, true);
+
+  // Level-3 children under magpie include run_code, run_code.json (schema), and failed chrome-devtools__click
+  assert.equal(magpieRow.count, 3);
+  assert.equal(magpieRow.failedCount, 1);
+  assert.equal(magpieRow.children.length, 3);
+  assert.equal(magpieRow.children.reduce((a, c) => a + c.tokens, 0), magpieRow.tokens);
+  const schemaChild = magpieRow.children.find((c) => c.mcpTool === 'run_code.json');
+  const failedChild = magpieRow.children.find((c) => c.mcpTool === 'chrome-devtools__click');
+  assert.equal(schemaChild?.isMcpSchema, true);
+  assert.equal(failedChild?.failed, true);
+
+  // Level-2 sum equals tool_calls bucket
+  assert.equal(tcItems.reduce((a, x) => a + x.tokens, 0), parsedMcp.composition.tool_calls);
+
+  // tools map uses server/tool for MCP and concrete command for run_command, preserving exact total count
+  assert.ok(parsedMcp.tools['magpie/run_code']);
+  assert.equal(parsedMcp.tools['magpie/run_code'].kind, 'mcp');
+  assert.equal(parsedMcp.tools['magpie/chrome-devtools__click'].errors, 1);
+  assert.ok(parsedMcp.tools['magpie/run_code.json']?.isMcpSchema);
+  assert.ok(parsedMcp.tools['google_docs/read_doc']);
+  assert.equal(parsedMcp.tools.npm.kind, 'command');
+  assert.equal(parsedMcp.tools.git.kind, 'command');
+  assert.equal(parsedMcp.tools.git.errors, 1);
+  assert.equal(parsedMcp.tools.run_command, undefined);
+  assert.equal(parsedMcp.tools.call_mcp_tool, undefined);
+  const toolsCountSum = Object.values(parsedMcp.tools).reduce((a, x) => a + x.count, 0);
+  assert.equal(toolsCountSum, parsedMcp.toolCallsCount);
+
+  // MCP schema read is excluded from workspace fileActivity
+  assert.equal(parsedMcp.fileActivity.length, 1);
+  assert.equal(parsedMcp.fileActivity[0].shortPath, 'src/index.js');
+
+  // parseTrace separates MCP items with server/tool & marks run_command with commandName
+  const trMcp = parseTrace(rawMcp, { knownMcpServers: ['google_docs', 'magpie'] });
+  assert.equal(trMcp.counts.mcp, 4);
+  assert.equal(trMcp.counts.tool, 3); // npm + git + read_file
+  const mcpTraceCall = trMcp.items.find((x) => x.kind === 'mcp' && x.mcpTool === 'run_code');
+  assert.equal(mcpTraceCall.mcpServer, 'magpie');
+  assert.equal(mcpTraceCall.argsPreview, '{"code":"return 42"}');
+  const mcpTraceSchema = trMcp.items.find((x) => x.kind === 'mcp' && x.isMcpSchema);
+  assert.equal(mcpTraceSchema.mcpServer, 'magpie');
+  assert.equal(mcpTraceSchema.mcpTool, 'run_code.json');
+  const cmdTrace = trMcp.items.find((x) => x.kind === 'tool' && x.isCommand && x.commandName === 'npm');
+  assert.equal(cmdTrace.argsPreview, 'npm test');
+  const modelDetail = trMcp.details.find((x) => x.kind === 'model' && x.step === 1);
+  assert.equal(modelDetail.toolCalls[1].name, 'magpie / run_code');
+  assert.equal(modelDetail.toolCalls[4].name, 'npm');
+  assert.equal(modelDetail.toolCalls[5].name, 'git');
 }
 
 // 6. Real live transcript smoke test (if path passed via env)

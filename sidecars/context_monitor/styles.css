@@ -36,6 +36,7 @@
   --purple: #9353d3;
   --pink: #d946ef;
   --cyan: #0891b2;
+  --mcp: #5c8f0c;
   --violet: #7c3aed;
   --rose: #dc2626;
   --slate-ink: #64748b;
@@ -76,6 +77,7 @@
   --purple: #b074f0;
   --pink: #e879f9;
   --cyan: #22b8cf;
+  --mcp: #a3e635;
   --violet: #8b5cf6;
   --rose: #ef4444;
   --slate-ink: #94a3b8;
@@ -751,7 +753,8 @@ button { cursor: pointer; }
   transition: transform 0.15s ease;
 }
 
-.bd-group.open .bd-chevron { transform: rotate(90deg); color: var(--fg-muted); }
+.bd-group.open > .bd-row .bd-chevron,
+.bd-sub-group.open > .bd-sub-row .bd-chevron { transform: rotate(90deg); color: var(--fg-muted); }
 .bd-chevron.placeholder { visibility: hidden; }
 
 .bd-dot {
@@ -913,6 +916,67 @@ button { cursor: pointer; }
 .bd-child-tag.err {
   color: var(--rose);
   background: color-mix(in srgb, var(--rose) 12%, transparent);
+}
+
+.bd-child-tag.mcp {
+  color: var(--mcp);
+  background: color-mix(in srgb, var(--mcp) 14%, transparent);
+  font-weight: 600;
+}
+
+.bd-child-tag.cmd {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  font-weight: 600;
+}
+
+.bd-child-tag.schema {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.bd-sub-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.bd-sub-row {
+  width: 100%;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--mcp) 45%, var(--border));
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bd-sub-row .bd-chevron {
+  width: 11px;
+  height: 11px;
+}
+
+.bd-sub-children {
+  display: none;
+  padding: 2px 0 3px 16px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bd-sub-group.open > .bd-sub-children {
+  display: flex;
+}
+
+.bd-grandchild {
+  border-left-color: color-mix(in srgb, var(--mcp) 24%, var(--border));
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.bd-sub-group.cmd-group > .bd-sub-row {
+  border-left-color: color-mix(in srgb, var(--amber) 45%, var(--border));
+}
+
+.bd-sub-group.cmd-group .bd-grandchild {
+  border-left-color: color-mix(in srgb, var(--amber) 24%, var(--border));
 }
 
 .bd-child-label {
@@ -1246,6 +1310,7 @@ button { cursor: pointer; }
 }
 
 .tag-read { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+.tag-mcp { color: var(--mcp); background: color-mix(in srgb, var(--mcp) 14%, transparent); }
 .tag-edit { color: var(--amber); background: color-mix(in srgb, var(--amber) 14%, transparent); }
 .tag-write { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
 .tag-ok { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
@@ -1292,6 +1357,22 @@ button { cursor: pointer; }
 }
 .bar-label-wrap { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
 .bar-dot { width: 6px; height: 6px; border-radius: 2px; flex: none; }
+.bar-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 0 4px;
+  border-radius: 3px;
+  flex: none;
+}
+.bar-badge.mcp {
+  color: var(--mcp);
+  background: color-mix(in srgb, var(--mcp) 14%, transparent);
+}
+.bar-badge.cmd {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 13%, transparent);
+}
 .bar-label {
   font-family: var(--mono);
   font-size: 11px;
@@ -1461,6 +1542,7 @@ button { cursor: pointer; }
 .ts-cell.on-input { background: var(--green); }
 .ts-cell.on-system { background: var(--blue); }
 .ts-cell.on-skill { background: var(--pink); }
+.ts-cell.on-mcp { background: var(--mcp); }
 .ts-cell.on-model { background: var(--violet); }
 .ts-cell.on-tool { background: var(--amber); }
 .ts-cell.on-error { background: var(--rose); }
@@ -1598,6 +1680,7 @@ button { cursor: pointer; }
 .tr-dot.model { background: var(--violet); }
 .tr-dot.tool { background: var(--amber); }
 .tr-dot.skill { background: var(--pink); }
+.tr-dot.mcp { background: var(--mcp); }
 .tr-dot.system { background: var(--blue); }
 .tr-dot.compaction { background: var(--slate-ink); }
 .tr-dot.error { background: var(--rose); }
@@ -1679,6 +1762,23 @@ button { cursor: pointer; }
 .tr-think-badge.badge-settings {
   color: var(--violet);
   background: color-mix(in srgb, var(--violet) 13%, transparent);
+}
+
+.tr-think-badge.badge-mcp {
+  color: var(--mcp);
+  background: color-mix(in srgb, var(--mcp) 14%, transparent);
+  font-weight: 600;
+}
+
+.tr-think-badge.badge-cmd {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 13%, transparent);
+  font-weight: 600;
+}
+
+.tr-think-badge.badge-schema {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
 }
 
 .tr-row.generating {

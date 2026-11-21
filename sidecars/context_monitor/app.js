@@ -24,6 +24,7 @@
       'trace.input': 'Input',
       'trace.injected': 'Injected',
       'trace.skill': 'Skill',
+      'trace.mcp': 'MCP',
       'trace.model': 'Model',
       'trace.tool': 'Tool',
       'trace.system': 'Injected',
@@ -65,6 +66,10 @@
       'td.turnStep': 'Turn / Step',
       'td.model': 'Model',
       'td.tool': 'Tool',
+      'td.mcpServer': 'MCP Server',
+      'td.mcpTool': 'MCP Tool',
+      'td.command': 'Command',
+      'td.rawTool': 'Underlying',
       'td.tokens': 'Tokens',
       'td.start': 'Started',
       'td.end': 'Ended',
@@ -152,6 +157,7 @@
       'cat.skill_injection': 'Skills',
       'cat.user_messages': 'User messages',
       'cat.tool_calls': 'Tool results',
+      'bd.commands': 'Commands',
       'cat.injected_content': 'Injected context',
       'cat.thinking': 'Thinking',
       'cat.assistant_reply': 'Replies',
@@ -305,6 +311,7 @@
       'trace.input': '输入',
       'trace.injected': '注入',
       'trace.skill': '技能',
+      'trace.mcp': 'MCP',
       'trace.model': '模型',
       'trace.tool': '工具',
       'trace.system': '注入',
@@ -346,6 +353,10 @@
       'td.turnStep': '轮次 / 步骤',
       'td.model': '模型',
       'td.tool': '工具',
+      'td.mcpServer': 'MCP 服务',
+      'td.mcpTool': 'MCP 工具',
+      'td.command': '命令',
+      'td.rawTool': '底层工具',
       'td.tokens': 'Token',
       'td.start': '开始时间',
       'td.end': '结束时间',
@@ -433,6 +444,7 @@
       'cat.skill_injection': '技能注入',
       'cat.user_messages': '用户消息',
       'cat.tool_calls': '工具结果',
+      'bd.commands': '命令执行',
       'cat.injected_content': '注入内容',
       'cat.thinking': '模型思考',
       'cat.assistant_reply': '模型回复',
@@ -742,7 +754,7 @@
     sessionData: null,
     traceEtag: '',
     traceData: null,
-    traceEnabled: new Set(['input', 'system', 'skill', 'model', 'tool', 'compaction', 'error']),
+    traceEnabled: new Set(['input', 'system', 'skill', 'mcp', 'model', 'tool', 'compaction', 'error']),
     traceQuery: '',
     traceSelectedIdx: null,
     traceDetailTab: 'overview',
@@ -1512,11 +1524,28 @@
     return Array.isArray(r.items) && r.items.length > 0;
   }
 
+  function collectExpandableSubIds(rows) {
+    const ids = [];
+    for (const r of rows) {
+      if (r.key !== 'tool_calls' || !Array.isArray(r.items)) continue;
+      const top = [...r.items].sort((a, b) => (b.tokens || 0) - (a.tokens || 0)).slice(0, 16);
+      for (const it of top) {
+        if (!Array.isArray(it?.children) || !it.children.length) continue;
+        if (it.isMcp) ids.push(`mcp:${it.mcpServer || it.label}`);
+        else if (it.isCommandGroup) ids.push('cmd:commands');
+      }
+    }
+    return ids;
+  }
+
   function renderBreakdownList(rows, freeTokens, ctxLimit) {
     const listEl = $('s-breakdown-list');
     const expandableIds = rows.filter(isBreakdownRowExpandable).map((r) => r.id);
-    const allOpen = expandableIds.length > 0 && expandableIds.every((id) => state.expandedKeys.has(id));
-    $('btn-toggle-all').textContent = t(allOpen ? 'action.collapseAll' : 'action.expandAll');
+    const expandableSubIds = collectExpandableSubIds(rows);
+    const isAllExpanded = () => expandableIds.length > 0
+      && expandableIds.every((id) => state.expandedKeys.has(id))
+      && expandableSubIds.every((id) => state.expandedItems.has(id));
+    $('btn-toggle-all').textContent = t(isAllExpanded() ? 'action.collapseAll' : 'action.expandAll');
 
     const sortBySizeDesc = (items) => [...items].sort((a, b) => (b.tokens || 0) - (a.tokens || 0));
 
@@ -1611,6 +1640,67 @@
           const isUserRow = r.key === 'user_messages';
           const isSkillRow = r.key === 'skill_injection' || it.tool === 'skill';
           const isToolRow = r.key === 'tool_calls';
+
+          // Level-2 expandable sub-group: MCP Server -> MCP tools/schemas, or Commands -> concrete commands
+          if (isToolRow && (it.isMcp || it.isCommandGroup) && Array.isArray(it.children) && it.children.length > 0) {
+            const isCmdGrp = Boolean(it.isCommandGroup);
+            const grpName = isCmdGrp ? t('bd.commands') : (it.mcpServer || it.label || 'mcp');
+            const subId = isCmdGrp ? 'cmd:commands' : `mcp:${it.mcpServer || it.label || 'mcp'}`;
+            const subOpen = state.expandedItems.has(subId);
+            const grpBadge = isCmdGrp
+              ? '<span class="bd-child-tag cmd">CMD</span>'
+              : '<span class="bd-child-tag mcp">MCP</span>';
+            const grpCountPill = it.count > 1 ? `<span class="bd-child-tag">×${it.count}</span>` : '';
+            const grpErrPill = it.failedCount > 0
+              ? `<span class="bd-child-tag err">${esc(it.failedCount > 1 ? `${t('trace.error')} ×${it.failedCount}` : t('trace.error'))}</span>`
+              : '';
+            const subChildrenHtml = sortBySizeDesc(it.children).map((ch) => {
+              const chFailed = ch.failed || ch.status === 'ERROR';
+              const chName = isCmdGrp ? (ch.commandName || ch.label || '') : (ch.mcpTool || ch.label || '');
+              let chPill = '';
+              if (chFailed) {
+                const errTxt = ch.count > 1 ? `${t('trace.error')} ×${ch.count}` : t('trace.error');
+                chPill = `<span class="bd-child-tag err">${esc(errTxt)}</span>`;
+              } else if (ch.count > 1) {
+                chPill = `<span class="bd-child-tag">×${ch.count}</span>`;
+              }
+              return `
+                <div class="bd-child bd-grandchild">
+                  <div class="bd-child-main">
+                    <div class="bd-child-left">
+                      ${!isCmdGrp && ch.isMcpSchema ? '<span class="bd-child-tag schema">schema</span>' : ''}
+                      <span class="bd-child-label mono" title="${esc(chName)}">${esc(chName)}</span>
+                      ${chPill}
+                    </div>
+                    <div class="bd-child-right">
+                      <span class="bd-child-tok">+${fmtTokens(ch.tokens)}</span>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('');
+
+            return `
+              <div class="bd-sub-group${isCmdGrp ? ' cmd-group' : ''}${subOpen ? ' open' : ''}" data-sub-id="${esc(subId)}">
+                <button type="button" class="bd-child bd-sub-row" aria-expanded="${subOpen}">
+                  <div class="bd-child-main">
+                    <div class="bd-child-left">
+                      ${CHEVRON_SVG}
+                      ${grpBadge}
+                      <span class="bd-child-label${isCmdGrp ? '' : ' mono'}" title="${esc(grpName)}">${esc(grpName)}</span>
+                      ${grpCountPill}
+                      ${grpErrPill}
+                    </div>
+                    <div class="bd-child-right">
+                      <span class="bd-child-tok">+${fmtTokens(it.tokens)}</span>
+                    </div>
+                  </div>
+                </button>
+                <div class="bd-sub-children">${subChildrenHtml}</div>
+              </div>
+            `;
+          }
+
           const isFailedTool = isToolRow && (it.failed || it.status === 'ERROR');
           const isInjectedRow = r.key === 'injected_content';
           const showToolTag = !isUserRow && !isSkillRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
@@ -1622,6 +1712,7 @@
           const userDot = isUserRow && it.group
             ? `<span class="bd-child-dot" style="background:${USER_INPUT_COLORS[it.group] || 'var(--green)'}"></span>`
             : '';
+          const cmdTag = isToolRow && it.isCommand ? '<span class="bd-child-tag cmd">CMD</span>' : '';
           let countPill = '';
           if (isFailedTool) {
             const errTxt = it.count > 1 ? `${t('trace.error')} ×${it.count}` : t('trace.error');
@@ -1636,8 +1727,9 @@
               <div class="bd-child-main">
                 <div class="bd-child-left">
                   ${userDot}
+                  ${cmdTag}
                   ${showToolTag ? `<span class="bd-child-tag${it.status === 'ERROR' ? ' err' : ''}">${esc(it.tool)}</span>` : ''}
-                  <span class="bd-child-label${isToolRow ? ' mono' : ''}">${esc(childLabel)}</span>
+                  <span class="bd-child-label${isToolRow ? ' mono' : ''}" title="${esc(childLabel)}">${esc(childLabel)}</span>
                   ${countPill}
                 </div>
                 <div class="bd-child-right">
@@ -1692,7 +1784,7 @@
 
     listEl.innerHTML = rowHtml + freeRowHtml;
 
-    listEl.querySelectorAll('.bd-group .bd-row.clickable').forEach((btn) => {
+    listEl.querySelectorAll('.bd-group > .bd-row.clickable').forEach((btn) => {
       btn.addEventListener('click', () => {
         const group = btn.closest('.bd-group');
         const id = group.dataset.groupId;
@@ -1701,8 +1793,20 @@
         else state.expandedKeys.delete(id);
         group.classList.toggle('open', willOpen);
         btn.setAttribute('aria-expanded', String(willOpen));
-        const allNow = expandableIds.every((k) => state.expandedKeys.has(k));
-        $('btn-toggle-all').textContent = t(allNow ? 'action.collapseAll' : 'action.expandAll');
+        $('btn-toggle-all').textContent = t(isAllExpanded() ? 'action.collapseAll' : 'action.expandAll');
+      });
+    });
+
+    listEl.querySelectorAll('.bd-sub-group > .bd-sub-row').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sub = btn.closest('.bd-sub-group');
+        const subId = sub.dataset.subId;
+        const willOpen = !state.expandedItems.has(subId);
+        if (willOpen) state.expandedItems.add(subId);
+        else state.expandedItems.delete(subId);
+        sub.classList.toggle('open', willOpen);
+        btn.setAttribute('aria-expanded', String(willOpen));
+        $('btn-toggle-all').textContent = t(isAllExpanded() ? 'action.collapseAll' : 'action.expandAll');
       });
     });
   }
@@ -1984,13 +2088,21 @@
         extraBadge = `<span class="tr-think-badge" style="color:var(--pink);background:color-mix(in srgb,var(--pink) 12%,transparent)">SKILL</span>`;
         preview = it.resultPreview || '';
         rightMeta = `#${it.step}`;
+      } else if (it.kind === 'mcp') {
+        name = it.mcpServer && it.mcpTool ? `${it.mcpServer} / ${it.mcpTool}` : (it.mcpTool || it.toolName || t('trace.mcp'));
+        extraBadge = `<span class="tr-think-badge badge-mcp">MCP</span>${it.isMcpSchema ? '<span class="tr-think-badge badge-schema">schema</span>' : ''}`;
+        preview = it.argsPreview
+          ? (it.resultPreview ? `${it.argsPreview} → ${it.resultPreview}` : it.argsPreview)
+          : (it.resultPreview || '');
+        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       } else if (it.kind === 'model') {
         name = it.model || t('trace.model');
         extraBadge = renderModelBadges(it);
         preview = it.preview || '';
         rightMeta = `${fmtTokens(it.outputTokens)} · #${it.step}`;
       } else {
-        name = it.toolName || t('trace.tool');
+        name = (it.isCommand && it.commandName) ? it.commandName : (it.toolName || t('trace.tool'));
+        if (it.isCommand) extraBadge = '<span class="tr-think-badge badge-cmd">CMD</span>';
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview} → ${it.resultPreview}` : it.argsPreview)
           : (it.resultPreview || '');
@@ -2002,10 +2114,10 @@
         <div class="tr-row static${it.reverted ? ' reverted' : ''}">
           <div class="tr-left">
             <span class="tr-dot ${dotCls}"></span>
-            <span class="tr-name">${esc(name)}</span>
+            <span class="tr-name" title="${esc(name)}">${esc(name)}</span>
             ${revBadge}
             ${extraBadge}
-            <span class="tr-preview${it.kind === 'tool' ? ' mono' : ''}">${esc(preview)}</span>
+            <span class="tr-preview${(it.kind === 'tool' || it.kind === 'mcp') ? ' mono' : ''}">${esc(preview)}</span>
           </div>
           <div class="tr-right"><span>${esc(rightMeta)}</span></div>
         </div>
@@ -2362,12 +2474,16 @@
         primary = fmtTokens(r.tokens || 0);
         secondary = `×${r.count || 0}`;
       }
+      const kindBadge = r.kind === 'mcp'
+        ? '<span class="bar-badge mcp">MCP</span>'
+        : (r.kind === 'command' ? '<span class="bar-badge cmd">CMD</span>' : '');
       const tip = `${r.name}: ×${r.count || 0} · ${fmtDur(r.durationMs || 0)} · ${fmtTokens(r.tokens || 0)}`;
       return `
         <div class="bar-row" title="${esc(tip)}">
           <div class="bar-row-top">
             <div class="bar-label-wrap">
               <span class="bar-dot" style="background:${color}"></span>
+              ${kindBadge}
               <span class="bar-label">${esc(r.name)}</span>
             </div>
             <div class="bar-right">
@@ -2539,6 +2655,7 @@
     { key: 'input', labelKey: 'trace.input', color: 'var(--green)' },
     { key: 'system', labelKey: 'trace.injected', color: 'var(--blue)' },
     { key: 'skill', labelKey: 'trace.skill', color: 'var(--pink)' },
+    { key: 'mcp', labelKey: 'trace.mcp', color: 'var(--mcp)' },
     { key: 'model', labelKey: 'trace.model', color: 'var(--violet)' },
     { key: 'tool', labelKey: 'trace.tool', color: 'var(--amber)' },
     { key: 'compaction', labelKey: 'trace.compactionTag', color: 'var(--slate-ink)' },
@@ -2754,7 +2871,7 @@
     const shouldStick = state.traceFirstScroll || (state.traceFollow && state.traceStick);
 
     if ($('trace-total-count')) $('trace-total-count').textContent = String(allItems.length);
-    const exclusiveCounts = { input: 0, system: 0, skill: 0, model: 0, tool: 0, compaction: 0, error: 0 };
+    const exclusiveCounts = { input: 0, system: 0, skill: 0, mcp: 0, model: 0, tool: 0, compaction: 0, error: 0 };
     for (const it of allItems) {
       const bucket = it.hasError ? 'error' : (isCompactionItem(it) ? 'compaction' : it.kind);
       if (bucket in exclusiveCounts) exclusiveCounts[bucket]++;
@@ -2776,6 +2893,11 @@
       if (!q) return true;
       return String(it.toolName || '').toLowerCase().includes(q)
         || String(it.skillName || '').toLowerCase().includes(q)
+        || String(it.mcpServer || '').toLowerCase().includes(q)
+        || String(it.mcpTool || '').toLowerCase().includes(q)
+        || String(it.commandName || '').toLowerCase().includes(q)
+        || (it.kind === 'mcp' && 'mcp'.includes(q))
+        || (it.isCommand && 'cmd'.includes(q))
         || String(it.model || '').toLowerCase().includes(q)
         || String(it.systemType || '').toLowerCase().includes(q)
         || (isCompactionItem(it) && t('trace.compaction').toLowerCase().includes(q))
@@ -2802,7 +2924,7 @@
       const lanes = [
         { key: 'input', labelKey: 'trace.input', match: (it) => !isCompactionItem(it) && (it.kind === 'input' || it.kind === 'system') },
         { key: 'model', labelKey: 'trace.model', match: (it) => !isCompactionItem(it) && it.kind === 'model' },
-        { key: 'tool', labelKey: 'trace.tool', match: (it) => !isCompactionItem(it) && (it.kind === 'tool' || it.kind === 'skill') },
+        { key: 'tool', labelKey: 'trace.tool', match: (it) => !isCompactionItem(it) && (it.kind === 'tool' || it.kind === 'skill' || it.kind === 'mcp') },
       ];
       const renderLaneCells = (lane) => `
         <div class="ts-cells">
@@ -2816,7 +2938,13 @@
             }
             if (!lane.match(it)) return '<div class="ts-cell"></div>';
             const cls = it.hasError ? 'on-error' : `on-${it.kind}`;
-            const label = it.skillName || it.toolName || it.model || it.systemType || t(`trace.${it.kind}`);
+            const label = it.skillName
+              || (it.kind === 'mcp' && it.mcpServer && it.mcpTool ? `${it.mcpServer} / ${it.mcpTool}` : '')
+              || (it.isCommand && it.commandName ? it.commandName : '')
+              || it.toolName
+              || it.model
+              || it.systemType
+              || t(`trace.${it.kind}`);
             return `<div class="ts-cell hit ${cls}${sel}${revCls}" data-tidx="${it.idx}" title="#${it.step} ${esc(label)}${esc(revNote)}"></div>`;
           }).join('')}
         </div>
@@ -2883,13 +3011,21 @@
         extraBadge = `<span class="tr-think-badge" style="color:var(--pink);background:color-mix(in srgb,var(--pink) 12%,transparent)">SKILL</span>`;
         preview = it.resultPreview || '';
         rightMeta = `#${it.step}`;
+      } else if (it.kind === 'mcp') {
+        name = it.mcpServer && it.mcpTool ? `${it.mcpServer} / ${it.mcpTool}` : (it.mcpTool || it.toolName || t('trace.mcp'));
+        extraBadge = `<span class="tr-think-badge badge-mcp">MCP</span>${it.isMcpSchema ? '<span class="tr-think-badge badge-schema">schema</span>' : ''}`;
+        preview = it.argsPreview
+          ? (it.resultPreview ? `${it.argsPreview}  →  ${it.resultPreview}` : it.argsPreview)
+          : it.resultPreview;
+        rightMeta = `${it.durationMs ? `${fmtDur(it.durationMs)} · ` : ''}#${it.step}`;
       } else if (it.kind === 'model') {
         name = it.model || t('trace.model');
         extraBadge = renderModelBadges(it);
         preview = it.preview || '';
         rightMeta = `${fmtTokens(it.outputTokens)} · #${it.step}`;
       } else {
-        name = it.toolName || t('trace.tool');
+        name = (it.isCommand && it.commandName) ? it.commandName : (it.toolName || t('trace.tool'));
+        if (it.isCommand) extraBadge = '<span class="tr-think-badge badge-cmd">CMD</span>';
         preview = it.argsPreview
           ? (it.resultPreview ? `${it.argsPreview}  →  ${it.resultPreview}` : it.argsPreview)
           : it.resultPreview;
@@ -2901,10 +3037,10 @@
         <button type="button" class="tr-row${sel}${it.reverted ? ' reverted' : ''}" data-tidx="${it.idx}">
           <div class="tr-left">
             <span class="tr-dot ${dotCls}"></span>
-            <span class="tr-name">${esc(name)}</span>
+            <span class="tr-name" title="${esc(name)}">${esc(name)}</span>
             ${revBadge}
             ${extraBadge}
-            <span class="tr-preview${it.kind === 'tool' ? ' mono' : ''}">${esc(preview)}</span>
+            <span class="tr-preview${(it.kind === 'tool' || it.kind === 'mcp') ? ' mono' : ''}">${esc(preview)}</span>
           </div>
           <div class="tr-right"><span>${esc(rightMeta)}</span></div>
         </button>
@@ -3018,6 +3154,7 @@
     const badgeCls = item.hasError ? 'tag-err'
       : isComp ? 'tag-neutral'
       : item.kind === 'input' ? 'tag-write'
+      : item.kind === 'mcp' ? 'tag-mcp'
       : item.kind === 'model' ? 'tag-read'
       : item.kind === 'skill' ? 'tag-read'
       : item.kind === 'system' ? 'tag-read'
@@ -3025,21 +3162,23 @@
     badge.className = `tag-pill ${badgeCls}`;
     badge.textContent = isComp
       ? t('trace.compaction')
-      : item.kind === 'tool'
-        ? (item.toolName || t('trace.tool'))
-        : item.kind === 'skill'
-          ? (item.skillName || t('trace.skill'))
-          : item.kind === 'system'
-            ? formatSystemName(item)
-            : t(`trace.${item.kind}`);
+      : item.kind === 'mcp'
+        ? (item.mcpServer && item.mcpTool ? `${item.mcpServer} / ${item.mcpTool}` : (item.mcpTool || item.toolName || t('trace.mcp')))
+        : item.kind === 'tool'
+          ? ((item.isCommand && item.commandName) ? item.commandName : (item.toolName || t('trace.tool')))
+          : item.kind === 'skill'
+            ? (item.skillName || t('trace.skill'))
+            : item.kind === 'system'
+              ? formatSystemName(item)
+              : t(`trace.${item.kind}`);
     $('td-step-label').textContent = `${t('step.turn', { turn: item.turn })} · ${t('step.label', { step: item.step })}${item.reverted ? ` · ${t('trace.reverted')}` : ''}`;
 
     // Tailored tabs per event kind:
     // - Model: Overview | Preview | Raw
-    // - Tool / Skill: Overview | Args | Result | Timing
+    // - Tool / Skill / MCP: Overview | Args | Result | Timing
     // - Input: Overview | Preview | Raw
     // - Injected / System: Overview | Raw
-    const tabs = (item.kind === 'tool' || item.kind === 'skill')
+    const tabs = (item.kind === 'tool' || item.kind === 'skill' || item.kind === 'mcp')
       ? [
           ['overview', t('td.overview')],
           ['args', t('td.args')],
@@ -3074,7 +3213,7 @@
     const bodyEl = $('td-body');
     const tab = state.traceDetailTab;
 
-    if (item.kind === 'tool' || item.kind === 'skill') {
+    if (item.kind === 'tool' || item.kind === 'skill' || item.kind === 'mcp') {
       const argsJson = JSON.stringify(item.args || {}, null, 2);
       const resultText = item.result || item.hookError || t('td.noContent');
       const errBlock = item.hookError
@@ -3098,13 +3237,30 @@
           <pre id="td-pre-res" class="td-pre">${esc(resultText)}</pre></div>
         `;
       } else {
+        const metaRows = item.kind === 'mcp'
+          ? [
+              [t('td.mcpServer'), item.mcpServer || '—'],
+              [t('td.mcpTool'), item.mcpTool || '—'],
+              ...(item.toolName && item.toolName !== item.mcpTool ? [[t('td.rawTool'), item.toolName]] : []),
+              [t('td.status'), item.status || 'DONE'],
+              [t('td.turnStep'), `${t('step.turn', { turn: item.turn })} · #${item.step}`],
+              [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms` : '—'],
+            ]
+          : item.isCommand
+            ? [
+                [t('td.command'), item.commandName || '—'],
+                [t('td.status'), item.status || 'DONE'],
+                [t('td.turnStep'), `${t('step.turn', { turn: item.turn })} · #${item.step}`],
+                [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms` : '—'],
+              ]
+            : [
+                [item.kind === 'skill' ? t('trace.skill') : t('td.tool'), item.skillName || item.toolName || '—'],
+                [t('td.status'), item.status || 'DONE'],
+                [t('td.turnStep'), `${t('step.turn', { turn: item.turn })} · #${item.step}`],
+                [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms` : '—'],
+              ];
         bodyEl.innerHTML = `
-          ${kv([
-            [item.kind === 'skill' ? t('trace.skill') : t('td.tool'), item.skillName || item.toolName || '—'],
-            [t('td.status'), item.status || 'DONE'],
-            [t('td.turnStep'), `${t('step.turn', { turn: item.turn })} · #${item.step}`],
-            [t('td.duration'), item.durationMs ? `${item.durationMs.toLocaleString()} ms` : '—'],
-          ])}
+          ${kv(metaRows)}
           ${errBlock}
           <div><div class="td-section-head"><span>${esc(t('td.args'))}</span>${copyBtnHtml('td-pre-args')}</div>
           <pre id="td-pre-args" class="td-pre">${esc(argsJson)}</pre></div>
@@ -3960,7 +4116,7 @@
     if (state.inspectedConvId) window.sidecar?.ui?.toggleConversation?.(state.inspectedConvId);
   });
 
-  // Expand/collapse all breakdown groups
+  // Expand/collapse all breakdown groups (including Level-2 MCP servers)
   $('btn-toggle-all').addEventListener('click', () => {
     if (!state.sessionData) return;
     const base = buildSessionRows(state.sessionData, DEFAULT_SESSION_CTX_LIMIT);
@@ -3968,9 +4124,16 @@
     const freeTokens = Math.max(0, limit - base.usedSum);
     const rows = base.rows;
     const ids = rows.filter(isBreakdownRowExpandable).map((r) => r.id);
-    const allOpen = ids.every((id) => state.expandedKeys.has(id));
-    if (allOpen) state.expandedKeys.clear();
-    else ids.forEach((id) => state.expandedKeys.add(id));
+    const subIds = collectExpandableSubIds(rows);
+    const allOpen = ids.every((id) => state.expandedKeys.has(id))
+      && subIds.every((id) => state.expandedItems.has(id));
+    if (allOpen) {
+      state.expandedKeys.clear();
+      state.expandedItems.clear();
+    } else {
+      ids.forEach((id) => state.expandedKeys.add(id));
+      subIds.forEach((id) => state.expandedItems.add(id));
+    }
     renderBreakdownList(rows, freeTokens, limit);
   });
 
