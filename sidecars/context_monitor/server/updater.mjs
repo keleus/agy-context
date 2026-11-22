@@ -60,6 +60,35 @@ export function parseGithubSlug(repoUrl) {
   return m ? `${m[1]}/${m[2].replace(/\.git$/, '')}` : '';
 }
 
+export function isTrustedDownloadUrl(url) {
+  const s = String(url || '').trim();
+  return (
+    /^https:\/\/codeload\.github\.com\/[^/\s]+\/[^/\s]+\/tar\.gz\/[^\s?#]+$/i.test(s)
+    || /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/releases\/download\/[^/\s]+\/agy-context(?:-[^/\s]+)?\.tar\.gz$/i.test(s)
+  );
+}
+
+export function selectReleaseDownloadUrl(rel, slug) {
+  const tagName = String(rel?.tag_name || '').trim();
+  const assets = Array.isArray(rel?.assets) ? rel.assets : [];
+  const prefix = `https://github.com/${slug}/releases/download/`;
+
+  const preferred = assets.find((a) => (
+    a?.name === 'agy-context.tar.gz'
+    && typeof a.browser_download_url === 'string'
+    && a.browser_download_url.startsWith(prefix)
+    && isTrustedDownloadUrl(a.browser_download_url)
+  )) || assets.find((a) => (
+    /^agy-context(?:-[^/\s]+)?\.tar\.gz$/i.test(String(a?.name || ''))
+    && typeof a.browser_download_url === 'string'
+    && a.browser_download_url.startsWith(prefix)
+    && isTrustedDownloadUrl(a.browser_download_url)
+  ));
+
+  if (preferred) return preferred.browser_download_url;
+  return tagName ? `https://codeload.github.com/${slug}/tar.gz/refs/tags/${encodeURIComponent(tagName)}` : '';
+}
+
 export function compareSemver(a, b) {
   const pa = String(a || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   const pb = String(b || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
@@ -198,7 +227,7 @@ export async function handleVersion(data) {
           latestVersion: latest,
           hasUpdate: compareSemver(latest, manifest.version) > 0,
           releaseUrl: rel.html_url || manifest.repository,
-          downloadUrl: `https://codeload.github.com/${slug}/tar.gz/refs/tags/${encodeURIComponent(tagName)}`,
+          downloadUrl: selectReleaseDownloadUrl(rel, slug),
         };
         versionCache = { ts: Date.now(), result: out };
         return out;
@@ -266,7 +295,7 @@ async function runSelfUpdate() {
   if (ver.error || !ver.downloadUrl) {
     throw new Error(ver.error || 'No download source available');
   }
-  if (!/^https:\/\/codeload\.github\.com\/[^/\s]+\/[^/\s]+\/tar\.gz\//i.test(ver.downloadUrl)) {
+  if (!isTrustedDownloadUrl(ver.downloadUrl)) {
     throw new Error('Untrusted download URL');
   }
 

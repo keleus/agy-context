@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-package:
+    name: Test & Package Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run unit tests
+        run: node --test test/*.test.mjs
+
+      - name: Build release package
+        run: bash scripts/package-release.sh
+
+      - name: Smoke-test CLI installer from packaged archive
+        run: |
+          TMP_TARGET="$(mktemp -d)"
+          AGY_CONTEXT_ARCHIVE_FILE="dist/agy-context.tar.gz" \
+          AGY_CONTEXT_TARGET_DIR="${TMP_TARGET}/agy-context" \
+            bash install.sh --release
+          test -f "${TMP_TARGET}/agy-context/plugin.json"
+          test -f "${TMP_TARGET}/agy-context/sidecars/context_monitor/main.mjs"
+          test -f "${TMP_TARGET}/agy-context/sidecars/context_monitor/web/js/app.js"
+          AGY_CONTEXT_TARGET_DIR="${TMP_TARGET}/agy-context" \
+            bash install.sh --uninstall
+          test ! -e "${TMP_TARGET}/agy-context"
+          rm -rf "${TMP_TARGET}"

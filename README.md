@@ -1,62 +1,146 @@
-# AGY Context
+<div align="center">
+  <img src="assets/logo.svg" alt="AGY Context Logo" width="72" height="72" />
+  <h1>AGY Context</h1>
+  <p>
+    <strong>Real-time session context monitor, full interaction trace inspector, and project/global token analytics docked in Antigravity's right auxiliary pane.</strong>
+  </p>
+  <p>
+    <a href="https://github.com/keleus/agy-context/releases/latest">
+      <img src="https://img.shields.io/github/v/release/keleus/agy-context?style=flat-square&color=007acc" alt="Latest Release" />
+    </a>
+    <a href="https://github.com/keleus/agy-context/actions/workflows/ci.yml">
+      <img src="https://img.shields.io/github/actions/workflow/status/keleus/agy-context/ci.yml?branch=main&style=flat-square&label=CI" alt="CI Status" />
+    </a>
+    <a href="./LICENSE">
+      <img src="https://img.shields.io/github/license/keleus/agy-context?style=flat-square" alt="Apache 2.0 License" />
+    </a>
+    <img src="https://img.shields.io/badge/dependencies-zero-10b981?style=flat-square" alt="Zero Dependencies" />
+  </p>
+  <p>
+    <a href="#features--screenshots">Features</a> ·
+    <a href="#installation">Installation</a> ·
+    <a href="#usage">Usage</a> ·
+    <a href="#privacy--architecture">Architecture</a>
+  </p>
+</div>
 
-An Antigravity plugin (zero-hook sidecar UI extension) that docks in the right auxiliary pane to monitor real-time session context occupancy, full interaction traces, and project/global token analytics.
+---
 
-## Features
+## Features & Screenshots
 
-### Context (`Session | Project | Global`)
-- **Adaptive Context Occupancy & Ring Gauge**: Circular occupancy gauge (`≥80%` amber warning, `≥90%` red critical), full-window horizontal bar with free space, cache hit rate, compaction counter, and real-time latest-call speed in the top bar. Defaults to `500k` per session, adapts to observed compaction ceilings, and tracks the historical session peak when exceeded.
-- **Current-Window Context Breakdown**: Mutually exclusive breakdown of live context occupancy across `System prompt`, `System tools`, `User messages` (merged by `Text input`, `Image input`, `File / Media`), `Injected context` (grouped by `Time`, `Image`, `Compaction`, `Settings`, `Other`), `Skills` (merged by skill name), `Project code` (project `read_file` / `view_file` reads merged by file path), `Tool results` (split by MCP server, shell commands, and other built-in tools & success/error), and per-model output (`Thinking` & `Text output`) with post-compaction average speed.
-- **Session Telemetry & Breakdowns**: 4-metric KPI strip (`Total Tokens`, `Cache Read`, `Output`, `Active Time` with `avg` & `max` `tok/s`), **Models**, **Token Breakdown** (cumulative session totals), **Time Breakdown**, **Context Trend** (smooth Bezier curve cleanly broken at every compaction drop), **Tool Execution** (succeeded/failed counts, ratio bar, total & average duration), and **Recent Trace**.
-- **Project & Global Insights**: Workspace-scoped and cross-workspace dashboards featuring a free `Start → End` date range picker + quick presets (`Today`, `7d`, `30d`, `All`), adaptive usage charts (`hour` / `day` / `week` / `month` / `year`), **Token & Time Breakdown**, **Models**, **Tool Execution**, ranked **Skills / Tools / Commands** (sorted by `Count`, `Time`, or `Context`), and searchable session cards with one-click jump.
+### 1. Session Context Window & Telemetry (`Session`)
 
-### Trace (Dedicated Side Pane)
-- **Standalone Auxiliary Tab**: Open **Trace** alongside **Context** from the `+` or **Extensions** menu to watch requests and tool calls stream live.
-- **3-Track Timeline Strip**: Fixed left lane labels (`Input` / `Model` / `Tool`) with vertical grey dashed divider lines for **Context Compaction** events and dimmed markers for **Reverted** branches.
-- **Exclusive Type Toggles & Revert Detection**: Independently filter `Input`, `Injected`, `Skill`, `Model`, `Tool`, `Compaction`, and `Error`, with automatic detection and `Reverted` badge / strikethrough marking for superseded branches.
-- **Progressive History Loading & Live Generation**: Automatically loads earlier history as you scroll back to Step `#0`, while displaying a pulsing live generating row at the bottom during active model calls.
-- **Master-Detail Inspector**: Multi-tag model rows (`Thinking`, `Tool Call`, `Output`), click-to-toggle detail drawer, in-place expandable Markdown preview, raw content blocks, tool arguments/results, host errors, and real measured request timing.
+Monitor real-time context occupancy, per-file code reads, tool/MCP overhead, and full-session performance without slowing down Antigravity.
 
-### Customization & Self-Update
-- **Bilingual UI & Theme Sync**: English and Simplified Chinese (`EN / 简`), automatically matching Antigravity's light and dark themes.
-- **Context Modules & Order Editor**: Show/hide and drag-or-move modules independently for both **Session** and **Project & Global**, with responsive 2-column independent-stack layout on wide screens.
-- **Disk-Persisted Settings**: Stored atomically in `$PLUGIN_DATA/settings.json` so preferences survive disable/enable, restarts, and updates.
-- **One-Click Self-Update**: Automatically checks GitHub Releases and updates + reloads in-place.
+| Context Window & Breakdown | Telemetry, Breakdowns & Context Trend |
+| :---: | :---: |
+| <img src="docs/screenshots/context-window.png" alt="Session Context Window and Breakdown" width="420" /> | <img src="docs/screenshots/session-telemetry.png" alt="Session Telemetry, Context Trend, and Tool Execution" width="420" /> |
+
+- **Adaptive Context Occupancy & Ring Gauge**: Reads each model's true context ceiling directly from Antigravity's DB, displays circular occupancy warnings (`≥80%` amber, `≥90%` red), full-window horizontal composition bar with free space, cache hit rate, compaction counter, and real-time latest-call speed in the top bar.
+- **Current-Window Context Breakdown**: Mutually exclusive breakdown across `Project code` (project `read_file` / `view_file` reads merged per file with `×N` counts), `Tool results` (grouped by MCP server/tool, shell commands, and built-in tools), `Skills`, `System prompt`, `System tools`, `User messages`, `Injected context`, and per-model output (`Thinking` & `Text output`).
+- **Real Measured Telemetry**: 4-metric KPI strip (`Total Tokens`, `Cache Read`, `Output`, `Active Time` with `avg` & `max` `tok/s`), **Models**, cumulative **Token Breakdown**, **Time Breakdown** (real nanosecond TTFT, Thinking, Output gen, and active Tool execution excluding approval waits), **Context Trend** (smooth Bezier curve segmented at every compaction drop), **Tool Execution**, and **Recent Trace**.
+
+---
+
+### 2. Project & Global Insights (`Project | Global`)
+
+<p align="center">
+  <img src="docs/screenshots/project-insights.png" alt="Project and Global Insights Dashboard" width="840" />
+</p>
+
+- **Flexible Time Ranges & Adaptive Charts**: Pick any custom `Start → End` date range or use quick presets (`Today`, `7d`, `30d`, `All`) with adaptive `hour` / `day` / `week` / `month` / `year` usage bars (`Cached` vs. `New In + Out`).
+- **Multi-Dimensional Breakdowns & Rankings**: Inspect workspace-scoped or cross-workspace **Token & Time Breakdown**, **Models**, **Tool Execution**, ranked **Skills / Tools / Commands** (with `MCP` & `CMD` badges, sortable by `Count`, `Time`, or `Context`), and searchable session cards with one-click jump.
+
+---
+
+### 3. Live Interaction Trace (`Trace` Side Pane)
+
+<p align="center">
+  <img src="docs/screenshots/trace-inspector.png" alt="Trace Inspector with 3-Track Timeline Strip and Detail Drawer" width="620" />
+</p>
+
+- **3-Track Duration-Proportional Timeline Strip**: Fixed left lanes (`Input` / `Model` / `Tool`) where model & tool pills scale by real duration (`5s = 10px`), two-tone model pills separate Thinking from Output/Tool Call, dashed vertical dividers mark **Context Compaction**, and independent horizontal lazy loading keeps long sessions smooth.
+- **Exclusive Filters, Revert Detection & Detail Drawer**: Filter independently by `Input`, `Injected`, `Skill`, `MCP`, `Model`, `Tool`, `Compaction`, and `Error`, search across args/results, automatically flag superseded **Reverted** branches, and inspect formatted Markdown previews, tool payloads, host errors, and raw JSON inline.
+
+---
+
+### 4. Customization, Theme Sync & One-Click Self-Update
+
+<p align="center">
+  <img src="docs/screenshots/settings-dark.png" alt="Settings, Context Modules Layout Editor, and Dark Theme" width="440" />
+</p>
+
+- **Bilingual UI & Native Theme Sync**: Instant English / Simplified Chinese (`EN / 简`) toggle and automatic synchronization with Antigravity's Light & Dark themes.
+- **Context Modules & Order Editor**: Show/hide and drag-or-move cards independently for **Session** and **Project & Global**, with responsive 2-column layout on wide panes and atomic persistence in `$PLUGIN_DATA/settings.json`.
+- **In-Place Self-Update**: Checks GitHub Releases directly from the side pane and upgrades + reloads cleanly with zero stale files.
+
+---
 
 ## Installation
 
-### From GitHub (via Antigravity CLI)
+### Option 1: One-Line CLI Install (Latest GitHub Release — Recommended)
+
+Install or upgrade directly to the latest CI-packaged release (with automatic SHA-256 verification):
+
+```bash
+curl -fsSL https://github.com/keleus/agy-context/releases/latest/download/install.sh | bash
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://github.com/keleus/agy-context/releases/latest/download/install.sh | bash -s -- --version v1.0.4
+```
+
+Uninstall via CLI:
+
+```bash
+curl -fsSL https://github.com/keleus/agy-context/releases/latest/download/install.sh | bash -s -- --uninstall
+```
+
+### Option 2: Antigravity CLI
 
 ```bash
 agy plugin install https://github.com/keleus/agy-context
 ```
 
-### From Local Repository
+### Option 3: From Local Repository (Development)
 
 ```bash
 git clone https://github.com/keleus/agy-context.git
 cd agy-context
 ./install.sh --link   # symlink into ~/.gemini/config/plugins/agy-context
 # or
-./install.sh --copy   # copy into ~/.gemini/config/plugins/agy-context
+./install.sh --copy   # copy runtime files into ~/.gemini/config/plugins/agy-context
 ```
 
-To uninstall:
+To uninstall locally:
 
 ```bash
 ./install.sh --uninstall
 ```
 
+---
+
 ## Usage
 
-1. Confirm **AGY Context** is enabled under **Skills & Customizations -> Plugins** in Antigravity.
-2. Open **Context** (`Session | Project | Global`) and/or **Trace** (live interaction history) from the conversation header's `+` menu or **Overview -> Extensions**.
-3. Both views share one lightweight background sidecar and automatically track the active conversation.
+1. Confirm **AGY Context** is enabled under **Skills & Customizations → Plugins** in Antigravity (after an in-place CLI upgrade, toggle it off and on once to restart the background sidecar).
+2. Open **Context** (`Session | Project | Global`) and/or **Trace** (live interaction history) from the conversation header's `+` menu or **Overview → Extensions**.
+3. Both views share one lightweight read-only sidecar and automatically track the active conversation.
+
+---
 
 ## Privacy & Architecture
 
-- **Zero-hook, read-only local sidecar**: Reads local conversation transcripts under `~/.gemini/antigravity/brain/<conversationId>/.system_generated/logs/` and per-conversation SQLite telemetry under `~/.gemini/antigravity/conversations/<conversationId>.db` in read-only mode, storing settings under `$PLUGIN_DATA/`. Never modifies conversation files, runs lifecycle hooks, or intercepts tool approval permissions.
-- **Zero external runtime dependencies**: Runs directly on Antigravity's bundled Node.js runtime (`sidecar_sdk` + built-in `node:sqlite`).
+| Aspect | Implementation |
+| :--- | :--- |
+| **Telemetry Source** | Read-only access to local transcripts (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/`) and per-conversation SQLite DBs (`~/.gemini/antigravity/conversations/<id>.db`). |
+| **Zero Hooks** | Never modifies conversation files, runs lifecycle hooks, or intercepts tool approvals. |
+| **Runtime** | Zero external dependencies — runs directly on Antigravity's bundled Node.js runtime (`sidecar_sdk` + built-in `node:sqlite`). |
+| **Settings Storage** | Stored atomically in `$PLUGIN_DATA/settings.json`. |
+| **Release Packaging** | Automated via GitHub Actions CI (`ci.yml` + `release.yml`), publishing clean runtime archives (`agy-context.tar.gz`, `agy-context-<tag>.zip`, `install.sh`, `SHA256SUMS.txt`). |
+
+---
 
 ## License
 

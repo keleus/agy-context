@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { applyPluginUpdate } from '../sidecars/context_monitor/server/updater.mjs';
+import {
+  applyPluginUpdate,
+  isTrustedDownloadUrl,
+  selectReleaseDownloadUrl,
+} from '../sidecars/context_monitor/server/updater.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -70,4 +74,36 @@ test('applyPluginUpdate removes deleted modules between modular versions and rej
     rmSync(tmp, { recursive: true, force: true });
     rmSync(badSrc, { recursive: true, force: true });
   }
+});
+
+test('selectReleaseDownloadUrl prefers packaged release tarball and validates trusted URLs', () => {
+  const slug = 'keleus/agy-context';
+  const withAssets = {
+    tag_name: 'v1.0.4',
+    assets: [
+      {
+        name: 'agy-context-v1.0.4.tar.gz',
+        browser_download_url: 'https://github.com/keleus/agy-context/releases/download/v1.0.4/agy-context-v1.0.4.tar.gz',
+      },
+      {
+        name: 'agy-context.tar.gz',
+        browser_download_url: 'https://github.com/keleus/agy-context/releases/download/v1.0.4/agy-context.tar.gz',
+      },
+    ],
+  };
+  assert.equal(
+    selectReleaseDownloadUrl(withAssets, slug),
+    'https://github.com/keleus/agy-context/releases/download/v1.0.4/agy-context.tar.gz',
+  );
+
+  const withoutAssets = { tag_name: 'v1.0.4', assets: [] };
+  assert.equal(
+    selectReleaseDownloadUrl(withoutAssets, slug),
+    'https://codeload.github.com/keleus/agy-context/tar.gz/refs/tags/v1.0.4',
+  );
+
+  assert.equal(isTrustedDownloadUrl('https://github.com/keleus/agy-context/releases/download/v1.0.4/agy-context.tar.gz'), true);
+  assert.equal(isTrustedDownloadUrl('https://codeload.github.com/keleus/agy-context/tar.gz/refs/tags/v1.0.4'), true);
+  assert.equal(isTrustedDownloadUrl('https://evil.example.com/agy-context.tar.gz'), false);
+  assert.equal(isTrustedDownloadUrl('https://github.com/keleus/agy-context/releases/download/v1.0.4/other.zip'), false);
 });

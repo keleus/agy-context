@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to package & attach (e.g. v1.0.4; defaults to latest v* tag)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    name: Package & Publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve target tag
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          elif [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+          else
+            TAG="$(git describe --tags --abbrev=0 --match 'v*')"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Target release tag: ${TAG}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run unit tests
+        run: node --test test/*.test.mjs
+
+      - name: Verify manifest version matches tag
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          MANIFEST_VER="$(node -p "JSON.parse(require('fs').readFileSync('plugin.json','utf8')).version")"
+          TAG_VER="${TAG#v}"
+          if [ "${MANIFEST_VER}" != "${TAG_VER}" ]; then
+            echo "::warning::plugin.json version (${MANIFEST_VER}) differs from tag (${TAG_VER})"
+          fi
+
+      - name: Package release assets
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: bash scripts/package-release.sh "${TAG}"
+
+      - name: Smoke-test packaged archive installer
+        run: |
+          TMP_TARGET="$(mktemp -d)"
+          AGY_CONTEXT_ARCHIVE_FILE="dist/agy-context.tar.gz" \
+          AGY_CONTEXT_TARGET_DIR="${TMP_TARGET}/agy-context" \
+            bash dist/install.sh --release
+          test -f "${TMP_TARGET}/agy-context/plugin.json"
+          test -f "${TMP_TARGET}/agy-context/sidecars/context_monitor/main.mjs"
+          rm -rf "${TMP_TARGET}"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; uploading packaged assets..."
+            gh release upload "${TAG}" dist/* --clobber
+          else
+            PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+            if [ -n "${PREV_TAG}" ]; then
+              COMMITS="$(git log "${PREV_TAG}..${TAG}" --pretty=format:'- %s (%h)')"
+              COMPARE_LINE="Full Changelog: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG}"
+            else
+              COMMITS="$(git log "${TAG}" -n 20 --pretty=format:'- %s (%h)')"
+              COMPARE_LINE=""
+            fi
+
+            cat > release-notes.md <<EOF
+          ## 中文更新说明
+
+          ### 新增内容
+          - _待补充_
+
+          ### 更新内容
+          - _待补充_
+
+          ### 修复内容
+          - _待补充_
+
+          ---
+
+          ## Release Notes (English)
+
+          ### Added
+          - _TBD_
+
+          ### Updated
+          - _TBD_
+
+          ### Fixed
+          - _TBD_
+
+          ---
+
+          ### Commits
+          ${COMMITS}
+
+          ${COMPARE_LINE}
+
+          ### CLI Install / 命令行安装
+          \`\`\`bash
+          curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | bash
+          \`\`\`
+          EOF
+
+            gh release create "${TAG}" dist/* \
+              --title "${TAG}" \
+              --notes-file release-notes.md
+          fi
