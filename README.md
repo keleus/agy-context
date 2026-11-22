@@ -1,6 +1,6 @@
 # AGY Context
 
-An Antigravity plugin (sidecar UI extension + lightweight lifecycle hooks) that docks in the right auxiliary pane to monitor real-time session context occupancy, full interaction traces, and project/global token analytics.
+An Antigravity plugin (zero-hook sidecar UI extension) that docks in the right auxiliary pane to monitor real-time session context occupancy, full interaction traces, and project/global token analytics.
 
 ## Features
 
@@ -55,8 +55,8 @@ To uninstall:
 
 ## Privacy & Architecture
 
-- **Local-only sidecar & hooks**: Reads local conversation transcripts under `~/.gemini/antigravity/brain/<conversationId>/.system_generated/logs/` and stores lightweight timing telemetry & settings under `$PLUGIN_DATA/`. Never modifies conversation files or intercepts tool approval permissions.
-- **Zero external runtime dependencies**: Runs directly on Antigravity's bundled Node.js runtime (`sidecar_sdk`) and system `python3`.
+- **Zero-hook, read-only local sidecar**: Reads local conversation transcripts under `~/.gemini/antigravity/brain/<conversationId>/.system_generated/logs/` and per-conversation SQLite telemetry under `~/.gemini/antigravity/conversations/<conversationId>.db` in read-only mode, storing settings under `$PLUGIN_DATA/`. Never modifies conversation files, runs lifecycle hooks, or intercepts tool approval permissions.
+- **Zero external runtime dependencies**: Runs directly on Antigravity's bundled Node.js runtime (`sidecar_sdk` + built-in `node:sqlite`).
 
 ## License
 

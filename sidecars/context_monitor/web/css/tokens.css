@@ -1,0 +1,128 @@
+/*
+ * AGY Context — Compact, Antigravity-native styling.
+ *
+ * Uses host theme tokens synced onto :root by /preload.js (--background,
+ * --foreground, --card, --secondary, --muted-foreground, --border, --primary).
+ * Low-chrome, hairline borders, 4px spacing scale, tabular numerals.
+ */
+
+:root {
+  color-scheme: light;
+  --bg: var(--background, #f7f7f8);
+  --card: var(--card, #ffffff);
+  --card-hover: color-mix(in srgb, var(--fg) 2.5%, var(--card));
+  --fg: var(--foreground, #1d1f21);
+  --fg-2: var(--secondary-foreground, #3d4348);
+  --fg-muted: var(--muted-foreground, #5d676f);
+  --fg-faint: var(--placeholder, #949ca3);
+  --border: var(--border, rgba(0, 0, 0, 0.08));
+  --border-strong: var(--card-border, rgba(0, 0, 0, 0.13));
+  --primary: var(--primary, #007acc);
+  --primary-fg: var(--primary-foreground, #ffffff);
+  --hover: color-mix(in srgb, var(--fg) 5%, transparent);
+  --field: color-mix(in srgb, var(--fg) 4%, transparent);
+  --track: color-mix(in srgb, var(--fg) 8%, transparent);
+  --free-seg: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--fg) 6%, transparent),
+    color-mix(in srgb, var(--fg) 6%, transparent) 4px,
+    color-mix(in srgb, var(--fg) 2.5%, transparent) 4px,
+    color-mix(in srgb, var(--fg) 2.5%, transparent) 8px
+  );
+
+  --blue: #3b82f6;
+  --amber: #d97706;
+  --green: #10b981;
+  --purple: #9353d3;
+  --pink: #d946ef;
+  --cyan: #0891b2;
+  --mcp: #5c8f0c;
+  --violet: #7c3aed;
+  --rose: #dc2626;
+  --slate-ink: #64748b;
+  --slate: color-mix(in srgb, var(--fg) 26%, transparent);
+
+  --hm-0: color-mix(in srgb, var(--fg) 6%, transparent);
+  --hm-1: color-mix(in srgb, var(--primary) 26%, var(--card));
+  --hm-2: color-mix(in srgb, var(--primary) 48%, var(--card));
+  --hm-3: color-mix(in srgb, var(--primary) 72%, var(--card));
+  --hm-4: var(--primary);
+
+  --font: var(--font-family, "Google Sans Flex", "Google Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif);
+  --mono: var(--editor-font-family, "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--background, #141518);
+  --card: var(--card, #1b1d22);
+  --card-hover: color-mix(in srgb, var(--fg) 3.5%, var(--card));
+  --fg: var(--foreground, #eceef2);
+  --fg-2: var(--secondary-foreground, #c2c8d2);
+  --fg-muted: var(--muted-foreground, #88909c);
+  --fg-faint: var(--placeholder, #5e6673);
+  --border: var(--border, rgba(255, 255, 255, 0.08));
+  --border-strong: var(--card-border, rgba(255, 255, 255, 0.14));
+  --hover: color-mix(in srgb, var(--fg) 6%, transparent);
+  --field: color-mix(in srgb, var(--fg) 5.5%, transparent);
+  --track: color-mix(in srgb, var(--fg) 9%, transparent);
+
+  --blue: #60a5fa;
+  --amber: #f59e0b;
+  --green: #34d399;
+  --purple: #b074f0;
+  --pink: #e879f9;
+  --cyan: #22b8cf;
+  --mcp: #a3e635;
+  --violet: #8b5cf6;
+  --rose: #ef4444;
+  --slate-ink: #94a3b8;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12.5px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--primary) 70%, transparent); outline-offset: 1px; }
+
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--fg) 18%, transparent) transparent; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: clip;
+}
+
