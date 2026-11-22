@@ -9,6 +9,7 @@ export const NON_MODEL_CATS = [
   { key: 'tool_definitions', color: 'var(--amber)' },
   { key: 'skill_injection', color: 'var(--pink)' },
   { key: 'user_messages', color: 'var(--green)' },
+  { key: 'file_reads', color: 'var(--lime)' },
   { key: 'tool_calls', color: 'var(--cyan)' },
   { key: 'injected_content', color: 'var(--blue)' },
 ];

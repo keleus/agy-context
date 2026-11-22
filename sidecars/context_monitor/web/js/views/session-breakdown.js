@@ -253,6 +253,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
       childrenInner += visible.map((it) => {
         const isUserRow = r.key === 'user_messages';
         const isSkillRow = r.key === 'skill_injection' || it.tool === 'skill';
+        const isFileReadRow = r.key === 'file_reads';
         const isToolRow = r.key === 'tool_calls';
 
         if (isToolRow && (it.isMcp || it.isCommandGroup) && Array.isArray(it.children) && it.children.length > 0) {
@@ -314,14 +315,15 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
           `;
         }
 
-        const isFailedTool = isToolRow && (it.failed || it.status === 'ERROR');
+        const isFailedTool = (isToolRow || isFileReadRow) && (it.failed || it.status === 'ERROR');
         const isInjectedRow = r.key === 'injected_content';
-        const showToolTag = !isUserRow && !isSkillRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
+        const showToolTag = !isUserRow && !isSkillRow && !isFileReadRow && !isToolRow && !isInjectedRow && it.tool && it.tool !== 'user' && it.tool !== 'system';
         const childLabel = isUserRow && it.group && hasI18nKey(`uinput.${it.group}`)
           ? t(`uinput.${it.group}`)
           : isInjectedRow && it.group && hasI18nKey(`inj.${it.group}`)
             ? t(`inj.${it.group}`)
             : (it.label || '');
+        const childTitle = isFileReadRow && it.detail ? it.detail : childLabel;
         const userDot = isUserRow && it.group
           ? `<span class="bd-child-dot" style="background:${USER_INPUT_COLORS[it.group] || 'var(--green)'}"></span>`
           : '';
@@ -330,7 +332,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
         if (isFailedTool) {
           const errTxt = it.count > 1 ? `${t('trace.error')} ×${it.count}` : t('trace.error');
           countPill = `<span class="bd-child-tag err">${esc(errTxt)}</span>`;
-        } else if ((isUserRow || isInjectedRow || isSkillRow || isToolRow) && it.count > 1) {
+        } else if ((isUserRow || isInjectedRow || isSkillRow || isFileReadRow || isToolRow) && it.count > 1) {
           countPill = `<span class="bd-child-tag">×${it.count}</span>`;
         } else if (isUserRow && (it.group === 'image' || it.group === 'file') && it.count > 0) {
           countPill = `<span class="bd-child-tag">×${it.count}</span>`;
@@ -342,7 +344,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
                 ${userDot}
                 ${cmdTag}
                 ${showToolTag ? `<span class="bd-child-tag${it.status === 'ERROR' ? ' err' : ''}">${esc(it.tool)}</span>` : ''}
-                <span class="bd-child-label${isToolRow ? ' mono' : ''}" title="${esc(childLabel)}">${esc(childLabel)}</span>
+                <span class="bd-child-label${(isToolRow || isFileReadRow) ? ' mono' : ''}" title="${esc(childTitle)}">${esc(childLabel)}</span>
                 ${countPill}
               </div>
               <div class="bd-child-right">

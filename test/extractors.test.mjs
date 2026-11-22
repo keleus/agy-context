@@ -6,6 +6,7 @@ import {
   extractMcpToolInfo,
   extractPrimaryCommand,
   extractSkillName,
+  isProjectCodeReadPath,
   splitUserInput,
 } from '../sidecars/context_monitor/parser.mjs';
 
@@ -73,4 +74,22 @@ test('extractMcpSchemaInfo and extractMcpToolInfo classify MCP schemas, calls, a
     extractMcpToolInfo({ name: 'read_resource', args: { ServerName: 'notion', Uri: 'notion://page/1' } }),
     { server: 'notion', tool: 'read_resource', isSchema: false, isResource: true },
   );
+});
+
+test('isProjectCodeReadPath separates project code from internal and system paths', () => {
+  assert.equal(isProjectCodeReadPath('/Users/dev/git/my-app/src/index.js'), true);
+  assert.equal(isProjectCodeReadPath('"/Users/dev/git/my-app/.github/workflows/ci.yml"'), true);
+  assert.equal(isProjectCodeReadPath('src/components/App.tsx'), true);
+  assert.equal(isProjectCodeReadPath('D:\\repos\\web\\main.ts'), true);
+
+  assert.equal(isProjectCodeReadPath(''), false);
+  assert.equal(isProjectCodeReadPath('/Users/dev/.gemini/antigravity/brain/abc/.system_generated/steps/1/output.txt'), false);
+  assert.equal(isProjectCodeReadPath('~/.gemini/config/rules/global.md'), false);
+  assert.equal(isProjectCodeReadPath('/tmp/a.txt'), false);
+  assert.equal(isProjectCodeReadPath('/private/tmp/out.log'), false);
+  assert.equal(isProjectCodeReadPath('/etc/shadow'), false);
+  assert.equal(isProjectCodeReadPath('/var/log/system.log'), false);
+  assert.equal(isProjectCodeReadPath('/Users/dev/Library/Application Support/foo/bar.json'), false);
+  assert.equal(isProjectCodeReadPath('/Users/dev/.cache/pip/http.json'), false);
+  assert.equal(isProjectCodeReadPath('C:\\Windows\\System32\\drivers\\etc\\hosts'), false);
 });

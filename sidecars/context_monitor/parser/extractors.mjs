@@ -16,6 +16,67 @@ const SHELL_WRAPPERS = new Set([
   'sudo', 'env', 'nohup', 'command', 'builtin', 'nice', 'ionice', 'timeout', 'xargs', 'caffeinate',
 ]);
 
+const SYSTEM_ABS_PREFIXES = [
+  '/tmp/',
+  '/private/tmp/',
+  '/var/',
+  '/private/var/',
+  '/etc/',
+  '/private/etc/',
+  '/usr/',
+  '/bin/',
+  '/sbin/',
+  '/dev/',
+  '/proc/',
+  '/sys/',
+  '/system/',
+  '/library/',
+  '/applications/',
+];
+
+const HOME_INTERNAL_DIRS = new Set([
+  '.gemini',
+  '.cache',
+  '.local',
+  '.config',
+  '.npm',
+  '.pnpm-store',
+  '.yarn',
+  '.cargo',
+  '.rustup',
+  'library',
+]);
+
+export function isProjectCodeReadPath(pathStr) {
+  const raw = unwrapArg(pathStr);
+  if (!raw) return false;
+  const norm = raw.replace(/\\/g, '/').trim();
+  if (!norm) return false;
+  const lower = norm.toLowerCase();
+
+  if (lower.includes('/.gemini/') || lower.startsWith('.gemini/') || lower.startsWith('~/.gemini/')) {
+    return false;
+  }
+  for (const prefix of SYSTEM_ABS_PREFIXES) {
+    if (lower.startsWith(prefix)) return false;
+  }
+  if (/^[a-z]:\/(?:windows|program files(?: \(x86\))?|programdata)\//i.test(norm)) {
+    return false;
+  }
+  if (/\/appdata\/(?:local\/temp|roaming)\//i.test(norm)) {
+    return false;
+  }
+  if (lower.startsWith('~/')) {
+    const firstSeg = lower.slice(2).split('/')[0];
+    if (HOME_INTERNAL_DIRS.has(firstSeg)) return false;
+  }
+  const homeMatch = lower.match(/^\/(?:users|home)\/[^/]+\/([^/]+)(?:\/|$)/);
+  if (homeMatch && HOME_INTERNAL_DIRS.has(homeMatch[1])) {
+    return false;
+  }
+  return true;
+}
+
 export function splitUserInput(raw) {
   const text = String(raw || '');
   const reqMatches = [...text.matchAll(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/gi)];
@@ -405,7 +466,15 @@ export function describeToolItem(tc, knownServers = null) {
   }
   if (name === 'read_file' || name === 'view_file') {
     const path = unwrapArg(args.Path || args.AbsolutePath || '');
-    return { label: shortenPath(path) || 'file', detail: path, category: 'tool_calls', tool: name, path };
+    const isCodeRead = isProjectCodeReadPath(path);
+    return {
+      label: shortenPath(path) || 'file',
+      detail: path,
+      category: isCodeRead ? 'file_reads' : 'tool_calls',
+      tool: name,
+      path,
+      isFileRead: isCodeRead,
+    };
   }
   if (name === 'run_command') {
     const summary = unwrapArg(args.toolSummary || '');

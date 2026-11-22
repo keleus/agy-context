@@ -33,6 +33,52 @@ export function mergeSkillItems(rawItems, targetBucket) {
   return merged;
 }
 
+export function mergeFileReadItems(rawItems, targetBucket) {
+  if (!rawItems.length) return rawItems;
+  const grouped = new Map();
+  let rawSum = 0;
+  for (const it of rawItems) {
+    const tok = Math.max(0, it.tokens || 0);
+    rawSum += tok;
+    const isErr = it.status === 'ERROR';
+    const fullPath = String(it.path || it.detail || '');
+    const label = String(it.label || fullPath || 'file');
+    const key = `${fullPath || label}:${isErr ? 'err' : 'ok'}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        label,
+        detail: fullPath || String(it.detail || ''),
+        path: fullPath,
+        tool: String(it.tool || 'read_file'),
+        failed: isErr,
+        count: 0,
+        rawTokens: 0,
+      });
+    }
+    const rec = grouped.get(key);
+    rec.count += 1;
+    rec.rawTokens += tok;
+  }
+
+  const list = [...grouped.values()];
+  const targetFiles = targetBucket || rawSum;
+  const alloc = distributeProportional(list, targetFiles);
+  const merged = list.map((rec, idx) => ({
+    label: rec.label,
+    detail: rec.detail,
+    path: rec.path,
+    tool: rec.tool,
+    isFileRead: true,
+    count: rec.count,
+    failed: rec.failed,
+    status: rec.failed ? 'ERROR' : 'DONE',
+    tokens: alloc[idx] || 0,
+    step: 0,
+  }));
+  merged.sort((a, b) => b.tokens - a.tokens || b.count - a.count);
+  return merged;
+}
+
 /**
  * Merges tool_calls into hierarchical breakdown rows:
  *   - MCP calls & schema reads group into Level-2 MCP Server rows with expandable Level-3 tool rows

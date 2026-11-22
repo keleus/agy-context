@@ -13,6 +13,7 @@ export {
   extractPrimaryCommand,
   extractSkillName,
   inferWorkspace,
+  isProjectCodeReadPath,
   splitUserInput,
 } from './parser/extractors.mjs';
 export {

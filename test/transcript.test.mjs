@@ -198,15 +198,17 @@ test('parseTranscript classifies MCP servers, commands, and hook telemetry', () 
   assert.equal(compSum, parsedMcp.currentContext);
 
   const tcItems = parsedMcp.categoryItems.tool_calls;
+  const frItems = parsedMcp.categoryItems.file_reads;
   const magpieRow = tcItems.find((x) => x.isMcp && x.mcpServer === 'magpie');
   const gdocsRow = tcItems.find((x) => x.isMcp && x.mcpServer === 'google_docs');
   const cmdGroupRow = tcItems.find((x) => x.isCommandGroup);
-  const readRow = tcItems.find((x) => !x.isMcp && !x.isCommand && x.label === 'read_file');
+  const readRow = frItems.find((x) => x.isFileRead && x.label === 'src/index.js');
   assert.ok(magpieRow);
   assert.ok(gdocsRow);
   assert.ok(cmdGroupRow);
   assert.ok(readRow);
-  assert.ok(!tcItems.some((x) => x.label === 'run_command' || x.label === 'call_mcp_tool'));
+  assert.equal(readRow.detail, '/Users/dev/git/my-app/src/index.js');
+  assert.ok(!tcItems.some((x) => x.label === 'run_command' || x.label === 'call_mcp_tool' || x.label === 'read_file'));
 
   assert.equal(cmdGroupRow.count, 2);
   assert.equal(cmdGroupRow.failedCount, 1);
@@ -223,6 +225,9 @@ test('parseTranscript classifies MCP servers, commands, and hook telemetry', () 
   assert.equal(magpieRow.children.find((c) => c.mcpTool === 'chrome-devtools__click')?.failed, true);
 
   assert.equal(tcItems.reduce((a, x) => a + x.tokens, 0), parsedMcp.composition.tool_calls);
+  assert.equal(frItems.reduce((a, x) => a + x.tokens, 0), parsedMcp.composition.file_reads);
+  assert.ok(parsedMcp.composition.file_reads > 0);
+  assert.ok(parsedMcp.cumulativeComposition.file_reads > 0);
 
   assert.ok(parsedMcp.tools['magpie/run_code']);
   assert.equal(parsedMcp.tools['magpie/run_code'].kind, 'mcp');
@@ -239,6 +244,83 @@ test('parseTranscript classifies MCP servers, commands, and hook telemetry', () 
 
   assert.equal(parsedMcp.fileActivity.length, 1);
   assert.equal(parsedMcp.fileActivity[0].shortPath, 'src/index.js');
+});
+
+test('parseTranscript splits project read_file into file_reads and keeps internal/temp reads in tool_calls', () => {
+  const lines = [
+    {
+      step_index: 0,
+      source: 'USER_EXPLICIT',
+      type: 'USER_INPUT',
+      status: 'DONE',
+      created_at: '2026-11-22T10:00:00Z',
+      content: '<USER_REQUEST>\nInspect parser files\n</USER_REQUEST>',
+    },
+    {
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-22T10:00:01Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 4000,
+      cache_read_tokens: 0,
+      output_tokens: 200,
+      tool_calls: [
+        { name: 'read_file', args: { Path: '/Users/dev/git/app/src/parser.mjs' } },
+        { name: 'read_file', args: { Path: '/Users/dev/git/app/src/parser.mjs' } },
+        { name: 'view_file', args: { AbsolutePath: '/Users/dev/git/app/src/missing.mjs' } },
+        { name: 'read_file', args: { Path: '/Users/dev/.gemini/antigravity/brain/abc/.system_generated/steps/9/output.txt' } },
+        { name: 'read_file', args: { Path: '/tmp/scratch.txt' } },
+      ],
+    },
+    { step_index: 2, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-22T10:00:02Z', content: 'a'.repeat(4000) },
+    { step_index: 3, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-22T10:00:03Z', content: 'b'.repeat(2000) },
+    { step_index: 4, source: 'MODEL', type: 'GENERIC', status: 'ERROR', created_at: '2026-11-22T10:00:04Z', content: 'ENOENT: no such file' },
+    { step_index: 5, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-22T10:00:05Z', content: 'c'.repeat(2000) },
+    { step_index: 6, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-22T10:00:06Z', content: 'd'.repeat(1000) },
+    {
+      step_index: 7,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-22T10:00:08Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 3000,
+      cache_read_tokens: 4000,
+      output_tokens: 150,
+      content: 'Inspected all files.',
+    },
+  ];
+  const parsed = parseTranscript(lines.map((x) => JSON.stringify(x)).join('\n'), {
+    conversationId: 'test-file-reads-split',
+  });
+
+  const compSum = CATEGORIES.reduce((a, k) => a + parsed.composition[k], 0);
+  assert.equal(compSum, parsed.currentContext);
+  const cumSum = CATEGORIES.reduce((a, k) => a + parsed.cumulativeComposition[k], 0);
+  assert.equal(cumSum, parsed.totals.totalTokens);
+
+  const fr = parsed.categoryItems.file_reads;
+  assert.equal(fr.length, 2);
+  const parserRow = fr.find((x) => x.label === 'src/parser.mjs');
+  const missingRow = fr.find((x) => x.label === 'src/missing.mjs');
+  assert.ok(parserRow);
+  assert.equal(parserRow.count, 2);
+  assert.equal(parserRow.failed, false);
+  assert.equal(parserRow.detail, '/Users/dev/git/app/src/parser.mjs');
+  assert.ok(missingRow);
+  assert.equal(missingRow.count, 1);
+  assert.equal(missingRow.failed, true);
+  assert.equal(missingRow.status, 'ERROR');
+  assert.equal(fr.reduce((a, x) => a + x.tokens, 0), parsed.composition.file_reads);
+
+  const tc = parsed.categoryItems.tool_calls;
+  assert.equal(tc.length, 1);
+  assert.equal(tc[0].label, 'read_file');
+  assert.equal(tc[0].count, 2);
+  assert.equal(tc.reduce((a, x) => a + x.tokens, 0), parsed.composition.tool_calls);
+  assert.ok(parsed.timeline[1].buckets.files > 0);
 });
 
 test('summarizeHookTelemetry tracks live generating and tool phases', () => {

@@ -33,11 +33,39 @@ import { buildHookIntervals, computeRevertedFlags, matchHookInterval, summarizeH
 import {
   buildModelComposition,
   buildModelsBreakdown,
+  mergeFileReadItems,
   mergeInjectedItems,
   mergeSkillItems,
   mergeToolCallItems,
   mergeUserMessageItems,
 } from './category_merge.mjs';
+
+function distributeToolCallTokens(tcs, totalTok, knownServers) {
+  const out = { file_reads: 0, skill_injection: 0, tool_calls: 0 };
+  if (!totalTok || !tcs.length) return out;
+  let wFile = 0;
+  let wSkill = 0;
+  let wTool = 0;
+  for (const tc of tcs) {
+    const cat = describeToolItem(tc, knownServers).category;
+    const w = Math.max(1, estimateTokens(JSON.stringify(tc)));
+    if (cat === 'file_reads') wFile += w;
+    else if (cat === 'skill_injection') wSkill += w;
+    else wTool += w;
+  }
+  const wSum = wFile + wSkill + wTool;
+  if (wSum <= 0) {
+    out.tool_calls = totalTok;
+    return out;
+  }
+  out.file_reads = Math.round((wFile / wSum) * totalTok);
+  out.skill_injection = Math.round((wSkill / wSum) * totalTok);
+  if (out.file_reads + out.skill_injection > totalTok) {
+    out.skill_injection = Math.max(0, totalTok - out.file_reads);
+  }
+  out.tool_calls = Math.max(0, totalTok - out.file_reads - out.skill_injection);
+  return out;
+}
 
 function collectUserInputItems(st, stepIndexFallback, safeMs, detailLimit, withCategories) {
   const { userText, injectedText } = splitUserInput(st.content);
@@ -196,6 +224,7 @@ export function parseTranscript(text, {
     tool_definitions: [],
     skill_injection: [],
     user_messages: [],
+    file_reads: [],
     tool_calls: [],
     injected_content: [],
   };
@@ -634,7 +663,11 @@ export function parseTranscript(text, {
 
       if (prevP.thinking) weights.thinking += estimateTokens(prevP.thinking);
       if (prevP.content) weights.assistant_reply += estimateTokens(prevP.content);
-      if (prevCalls.length) weights.tool_calls += estimateTokens(JSON.stringify(prevCalls));
+      for (const tc of prevCalls) {
+        const tcCat = describeToolItem(tc, knownServers).category;
+        const bucketKey = (tcCat === 'file_reads' || tcCat === 'skill_injection') ? tcCat : 'tool_calls';
+        weights[bucketKey] += estimateTokens(JSON.stringify(tc));
+      }
 
       let genericIdx = 0;
       const stepItems = [];
@@ -726,7 +759,9 @@ export function parseTranscript(text, {
               group: item.group || '',
               label: item.label,
               detail: item.detail,
+              path: item.path || '',
               tool: item.tool,
+              isFileRead: Boolean(item.isFileRead),
               isMcp: Boolean(item.isMcp),
               mcpServer: item.mcpServer || '',
               mcpTool: item.mcpTool || '',
@@ -761,7 +796,12 @@ export function parseTranscript(text, {
     if (outTok > 0) {
       cumulativeBuckets.thinking += stepOutThink;
       cumulativeBuckets.assistant_reply += stepOutReply;
-      cumulativeBuckets.tool_calls += stepOutTool;
+      if (stepOutTool > 0) {
+        const outToolSplit = distributeToolCallTokens(tcs, stepOutTool, knownServers);
+        cumulativeBuckets.file_reads += outToolSplit.file_reads;
+        cumulativeBuckets.skill_injection += outToolSplit.skill_injection;
+        cumulativeBuckets.tool_calls += outToolSplit.tool_calls;
+      }
     }
 
     // --- Real measured timing (DB first, then transcript/hook; never estimated) ---
@@ -890,6 +930,7 @@ export function parseTranscript(text, {
         system: currentBuckets.system_prompt + currentBuckets.tool_definitions,
         user: currentBuckets.user_messages + currentBuckets.injected_content,
         skill: currentBuckets.skill_injection,
+        files: currentBuckets.file_reads,
         tools: currentBuckets.tool_calls,
         model: currentBuckets.thinking + currentBuckets.assistant_reply,
       },
@@ -915,23 +956,32 @@ export function parseTranscript(text, {
       lastOutDist.thinking = thTok;
       if (lastTcs.length === 0) {
         lastOutDist.assistant_reply = remTok;
-      } else if (!lastP.content) {
-        lastOutDist.tool_calls = remTok;
       } else {
-        const wRep = estimateTokens(lastP.content);
-        const wTc = estimateTokens(JSON.stringify(lastTcs));
-        const wSum = wRep + wTc;
-        lastOutDist.tool_calls = wSum > 0 ? Math.round((wTc / wSum) * remTok) : 0;
-        lastOutDist.assistant_reply = Math.max(0, remTok - lastOutDist.tool_calls);
+        let tcTok = remTok;
+        if (lastP.content) {
+          const wRep = estimateTokens(lastP.content);
+          const wTc = estimateTokens(JSON.stringify(lastTcs));
+          const wSum = wRep + wTc;
+          tcTok = wSum > 0 ? Math.round((wTc / wSum) * remTok) : 0;
+          lastOutDist.assistant_reply = Math.max(0, remTok - tcTok);
+        }
+        const split = distributeToolCallTokens(lastTcs, tcTok, knownServers);
+        lastOutDist.file_reads = split.file_reads;
+        lastOutDist.skill_injection = split.skill_injection;
+        lastOutDist.tool_calls = split.tool_calls;
       }
     } else {
       const outW = emptyBuckets();
       if (lastP.thinking) outW.thinking = estimateTokens(lastP.thinking);
       if (lastP.content) outW.assistant_reply = estimateTokens(lastP.content);
-      if (lastTcs.length) {
-        outW.tool_calls = estimateTokens(JSON.stringify(lastTcs));
+      for (const tc of lastTcs) {
+        const tcCat = describeToolItem(tc, knownServers).category;
+        const bucketKey = (tcCat === 'file_reads' || tcCat === 'skill_injection') ? tcCat : 'tool_calls';
+        outW[bucketKey] += estimateTokens(JSON.stringify(tc));
       }
-      if (outW.thinking + outW.assistant_reply + outW.tool_calls === 0) outW.assistant_reply = 1;
+      if (outW.thinking + outW.assistant_reply + outW.file_reads + outW.skill_injection + outW.tool_calls === 0) {
+        outW.assistant_reply = 1;
+      }
       lastOutDist = normalizeDistribute(outW, lastOutputTokens);
     }
     for (const k of CATEGORIES) currentBuckets[k] += lastOutDist[k];
@@ -957,6 +1007,7 @@ export function parseTranscript(text, {
   }
 
   categoryItems.skill_injection = mergeSkillItems(categoryItems.skill_injection, currentBuckets.skill_injection);
+  categoryItems.file_reads = mergeFileReadItems(categoryItems.file_reads, currentBuckets.file_reads);
   categoryItems.tool_calls = mergeToolCallItems(categoryItems.tool_calls, currentBuckets.tool_calls);
   categoryItems.user_messages = mergeUserMessageItems(categoryItems.user_messages, currentBuckets.user_messages);
   categoryItems.injected_content = mergeInjectedItems(categoryItems.injected_content, currentBuckets.injected_content);
