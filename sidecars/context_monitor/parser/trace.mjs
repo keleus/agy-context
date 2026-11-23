@@ -237,7 +237,10 @@ export function parseTrace(text, { hookTimings = null, dbTelemetry = null, known
           timingSource = 'hook';
         }
       }
-      const tokPerSec = modelDurMs > 0 ? Math.round((outTok / (modelDurMs / 1000)) * 10) / 10 : 0;
+      const speedMs = streamMs > 0
+        ? streamMs
+        : (ttftMs > 0 ? 0 : modelDurMs);
+      const tokPerSec = speedMs > 0 ? Math.round((outTok / (speedMs / 1000)) * 10) / 10 : 0;
 
       const replyText = String(st.content || '');
       const thinkingText = String(st.thinking || '');

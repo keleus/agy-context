@@ -251,10 +251,10 @@ export function buildOverview({ range = '30d', date = '', start = '', end = '', 
     totalTimedOut += mv.timedOutputTokens || 0;
     totalTimedMs += mv.timedDurationMs || 0;
   }
-  const totalModelMs = modelWaitMs + thinkingMs + modelGenMs;
+  const totalGenMs = thinkingMs + modelGenMs;
   const outputTokPerSec = totalTimedMs > 0
     ? Math.round((totalTimedOut / (totalTimedMs / 1000)) * 10) / 10
-    : (totalModelMs > 0 ? Math.round((totalOutput / (totalModelMs / 1000)) * 10) / 10 : 0);
+    : (totalGenMs > 0 ? Math.round((totalOutput / (totalGenMs / 1000)) * 10) / 10 : 0);
 
   const modelsBreakdown = Object.entries(modelsUsed)
     .map(([m, mv]) => {

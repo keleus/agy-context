@@ -237,14 +237,17 @@ export function updateTopbarSpeed(s) {
   for (let i = tl.length - 1; i >= 0; i--) {
     const pt = tl[i];
     const outTok = Number(pt?.outputTokens || 0);
+    const streamMs = Number(pt?.streamMs || 0);
+    const ttftMs = Number(pt?.ttftMs || 0);
     const durMs = Number(pt?.durationMs || 0);
-    if (pt && durMs > 0 && outTok > 0) {
-      latestCall = { ...pt, outTok, durMs };
+    const speedMs = streamMs > 0 ? streamMs : (ttftMs > 0 ? 0 : durMs);
+    if (pt && speedMs > 0 && outTok > 0) {
+      latestCall = { ...pt, outTok, speedMs };
       break;
     }
   }
   const spd = latestCall
-    ? Math.round((latestCall.outTok / (latestCall.durMs / 1000)) * 10) / 10
+    ? (latestCall.tokPerSec || Math.round((latestCall.outTok / (latestCall.speedMs / 1000)) * 10) / 10)
     : (s.timing?.outputTokPerSec || 0);
   if (!spd) {
     el.classList.add('hidden');

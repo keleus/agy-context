@@ -257,8 +257,16 @@ test('extractTelemetryFromDb + parseTranscript/parseTrace use real DB timings wi
   assert.equal(parsed.timing.toolExecMs, 2500);  // exact DB tool duration
   assert.equal(parsed.timing.otherMs, 0);        // never fabricated 1.5%
   assert.equal(parsed.timing.activeMs, 16000);
-  // End-to-end throughput: (200 + 1000) / ((5000 + 8500) / 1000) = 88.9 tok/s
-  assert.equal(parsed.timing.outputTokPerSec, 88.9);
+  // Generation throughput excluding TTFT: (200 + 1000) / ((1000 + 5000) / 1000) = 200 tok/s
+  assert.equal(parsed.timing.outputTokPerSec, 200);
+  assert.equal(parsed.timing.maxTokPerSec, 200);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].durationMs, 13500);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].timedDurationMs, 6000);
+  assert.equal(parsed.modelsBreakdown[0].tokPerSec, 200);
+  assert.equal(parsed.modelComposition[0].tokPerSec, 200);
+  assert.equal(parsed.modelComposition[0].postCompactTokPerSec, 200);
+  assert.equal(parsed.timeline[0].tokPerSec, 200);
+  assert.equal(parsed.timeline[1].tokPerSec, 200);
   // Exact API thinking tokens from gen_metadata.1.4.9
   assert.equal(parsed.modelsUsed['gemini-4-neon-high'].outThinkingTokens, 520); // 120 + 400
   assert.equal(parsed.modelsUsed['gemini-4-neon-high'].outReplyTokens, 600);
@@ -275,7 +283,7 @@ test('extractTelemetryFromDb + parseTranscript/parseTrace use real DB timings wi
   assert.equal(models[0].thinkingTokens, 120);
   assert.equal(models[0].streamMs, 1000);
   assert.equal(models[0].durationMs, 5000);
-  assert.equal(models[0].tokPerSec, 40);
+  assert.equal(models[0].tokPerSec, 200);
   assert.equal(models[1].timingSource, 'db');
   assert.equal(models[1].timingUnavailable, false);
   assert.equal(models[1].ttftMs, 3500);
@@ -284,7 +292,7 @@ test('extractTelemetryFromDb + parseTranscript/parseTrace use real DB timings wi
   assert.equal(models[1].thinkingTokens, 400);
   assert.equal(models[1].streamMs, 5000);
   assert.equal(models[1].durationMs, 8500);
-  assert.equal(models[1].tokPerSec, 117.6);
+  assert.equal(models[1].tokPerSec, 200);
   const toolItem = tr.items.find((x) => x.kind === 'tool');
   assert.equal(toolItem.durationMs, 2500);
 
@@ -456,4 +464,43 @@ test('tool execution excludes PENDING (s1) and WAITING_FOR_USER (s9) approval wa
   assert.equal(fmtTraceDur(3_660_000), '1h1m');
   assert.equal(fmtTraceDur(3_605_000), '1h5s');
   assert.equal(fmtTraceDur(3_665_000), '1h1m5s');
+});
+
+test('speed calculation does not fall back to TTFT when streamMs is zero', () => {
+  const jsonl = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-21T10:00:00Z', content: '<USER_REQUEST>\nhi\n</USER_REQUEST>' },
+    {
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:01Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 1000,
+      cache_read_tokens: 0,
+      output_tokens: 5,
+      content: 'ok',
+    },
+  ].map((x) => JSON.stringify(x)).join('\n');
+
+  const dbTelemetry = {
+    steps: new Map([
+      [1, { isPlanner: true, totalMs: 2500, ttftMs: 2500, streamMs: 0, thinkingMs: 0, outputGenMs: 0, endMs: Date.parse('2026-11-21T10:00:03.500Z') }],
+    ]),
+  };
+
+  const parsed = parseTranscript(jsonl, { conversationId: 'ttft-only-test', dbTelemetry });
+  assert.equal(parsed.timing.modelWaitMs, 2500);
+  assert.equal(parsed.timing.outputTokPerSec, 0);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].durationMs, 2500);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].timedDurationMs, 0);
+  assert.equal(parsed.modelsBreakdown[0].tokPerSec, 0);
+  assert.equal(parsed.timeline[0].tokPerSec, 0);
+
+  const tr = parseTrace(jsonl, { dbTelemetry });
+  const m = tr.items.find((x) => x.kind === 'model');
+  assert.equal(m.durationMs, 2500);
+  assert.equal(m.ttftMs, 2500);
+  assert.equal(m.streamMs, 0);
+  assert.equal(m.tokPerSec, 0);
 });

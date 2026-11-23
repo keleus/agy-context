@@ -18,6 +18,12 @@ export function computeSessionSpeedStats(s) {
   const avgSpeed = Number(s?.timing?.outputTokPerSec || 0);
   const tl = Array.isArray(s?.timeline) ? s.timeline : [];
 
+  const speedMsOf = (pt) => {
+    const streamMs = Number(pt?.streamMs || 0);
+    if (streamMs > 0) return streamMs;
+    return Number(pt?.ttftMs || 0) > 0 ? 0 : Number(pt?.durationMs || 0);
+  };
+
   let maxSpeed = Number(s?.timing?.maxTokPerSec || 0);
   if (!maxSpeed && tl.length) {
     let bestQualified = 0;
@@ -26,7 +32,7 @@ export function computeSessionSpeedStats(s) {
       const rate = Number(pt?.tokPerSec || 0);
       if (rate <= 0) continue;
       if (rate > bestAny) bestAny = rate;
-      if ((pt.durationMs || 0) >= 200 && (pt.outputTokens || 0) >= 10 && rate > bestQualified) {
+      if (speedMsOf(pt) >= 200 && (pt.outputTokens || 0) >= 10 && rate > bestQualified) {
         bestQualified = rate;
       }
     }
@@ -43,7 +49,7 @@ export function computeSessionSpeedStats(s) {
   const postWindow = lastCompIdx >= 0 ? tl.slice(lastCompIdx) : tl;
   const agg = {};
   for (const pt of postWindow) {
-    const dur = Number(pt?.durationMs || 0);
+    const dur = speedMsOf(pt);
     const out = Number(pt?.outputTokens || 0);
     const m = pt?.model || 'default';
     if (dur > 0 && out > 0) {

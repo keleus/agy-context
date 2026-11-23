@@ -257,15 +257,18 @@ export function renderTraceDetailPanel(item) {
     } else {
       const expanded = !!state.traceOverviewExpanded;
       const hasTiming = (item.durationMs || 0) > 0;
-      const detailThroughput = hasTiming && (item.outputTokens || 0) > 0
-        ? Math.round((item.outputTokens / (item.durationMs / 1000)) * 10) / 10
+      const speedMs = (item.streamMs || 0) > 0
+        ? item.streamMs
+        : ((item.ttftMs || 0) > 0 ? 0 : (item.durationMs || 0));
+      const detailThroughput = speedMs > 0 && (item.outputTokens || 0) > 0
+        ? Math.round((item.outputTokens / (speedMs / 1000)) * 10) / 10
         : (item.tokPerSec || 0);
       const timingRows = [[t('td.start'), fmtIsoLocal(item.at)]];
       if ((item.ttftMs || 0) > 0) timingRows.push([t('td.ttft'), `${(item.ttftMs / 1000).toFixed(2)}s`]);
       if ((item.thinkingMs || 0) > 0) timingRows.push([t('td.thinkingTime'), `${(item.thinkingMs / 1000).toFixed(2)}s`]);
       if ((item.streamMs || 0) > 0) timingRows.push([t('td.genTime'), `${(item.streamMs / 1000).toFixed(2)}s`]);
       timingRows.push([t('td.duration'), hasTiming ? `${(item.durationMs / 1000).toFixed(2)}s` : '—']);
-      timingRows.push([t('td.throughput'), hasTiming && detailThroughput ? `${detailThroughput} tok/s` : '—']);
+      timingRows.push([t('td.throughput'), detailThroughput > 0 ? `${detailThroughput} tok/s` : '—']);
       const hasPreviewBody = !!(item.thinking || item.content || tcs.length);
       bodyEl.innerHTML = `
         ${kv([

@@ -419,12 +419,14 @@ export function renderSession() {
     ? s.modelsBreakdown
     : Object.entries(s.modelsUsed || {}).map(([m, mv]) => {
         const p = (mv.inputTokens || 0) + (mv.cacheReadTokens || 0);
+        const tMs = mv.timedDurationMs ?? mv.durationMs ?? 0;
+        const tOut = mv.timedOutputTokens ?? mv.outputTokens ?? 0;
         return {
           model: m,
           ...mv,
           totalTokens: p + (mv.outputTokens || 0),
           cacheHitRate: p > 0 ? (mv.cacheReadTokens || 0) / p : 0,
-          tokPerSec: mv.durationMs > 0 ? Math.round(((mv.outputTokens || 0) / (mv.durationMs / 1000)) * 10) / 10 : 0,
+          tokPerSec: tMs > 0 ? Math.round((tOut / (tMs / 1000)) * 10) / 10 : 0,
         };
       }).sort((a, b) => b.totalTokens - a.totalTokens);
   renderModelsCard($('s-models-list'), $('s-models-bar'), $('s-models-meta'), sessModels, { showSessions: false });

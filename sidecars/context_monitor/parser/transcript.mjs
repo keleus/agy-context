@@ -844,18 +844,25 @@ export function parseTranscript(text, {
       }
     }
 
+    const callSpeedMs = stepStreamMs > 0
+      ? stepStreamMs
+      : (stepTtftMs > 0 ? 0 : callModelMs);
+
     if (callModelMs > 0) {
       modelsUsed[model].durationMs += callModelMs;
-      modelsUsed[model].timedDurationMs += callModelMs;
+    }
+
+    if (callSpeedMs > 0) {
+      modelsUsed[model].timedDurationMs += callSpeedMs;
       modelsUsed[model].timedOutputTokens += outTok;
       mc.postCompactTimedOut += outTok;
-      mc.postCompactTimedMs += callModelMs;
-      totalTimedModelMs += callModelMs;
+      mc.postCompactTimedMs += callSpeedMs;
+      totalTimedModelMs += callSpeedMs;
       totalTimedOutput += outTok;
       if (outTok > 0) {
-        const callRate = Math.round((outTok / (callModelMs / 1000)) * 10) / 10;
+        const callRate = Math.round((outTok / (callSpeedMs / 1000)) * 10) / 10;
         if (callRate > maxTokPerSecAny) maxTokPerSecAny = callRate;
-        if (callModelMs >= 200 && outTok >= 10 && callRate > maxTokPerSec) {
+        if (callSpeedMs >= 200 && outTok >= 10 && callRate > maxTokPerSec) {
           maxTokPerSec = callRate;
         }
       }
@@ -904,7 +911,7 @@ export function parseTranscript(text, {
       }
     }
 
-    const callTokPerSec = callModelMs > 0 ? Math.round((outTok / (callModelMs / 1000)) * 10) / 10 : 0;
+    const callTokPerSec = callSpeedMs > 0 ? Math.round((outTok / (callSpeedMs / 1000)) * 10) / 10 : 0;
 
     timeline.push({
       step: pStep.step_index ?? pIdx,
