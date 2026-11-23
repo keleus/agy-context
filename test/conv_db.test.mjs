@@ -504,3 +504,67 @@ test('speed calculation does not fall back to TTFT when streamMs is zero', () =>
   assert.equal(m.streamMs, 0);
   assert.equal(m.tokPerSec, 0);
 });
+
+test('pure tool-call steps without thinking are excluded from speed stats including maxTokPerSec', () => {
+  const jsonl = [
+    { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', status: 'DONE', created_at: '2026-11-21T10:00:00Z', content: '<USER_REQUEST>\nedit file\n</USER_REQUEST>' },
+    {
+      step_index: 1,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:01Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 1000,
+      cache_read_tokens: 0,
+      output_tokens: 600,
+      tool_calls: [{ name: 'edit_file', args: { Path: '/tmp/a.js', Target: 'a', Replacement: 'b' } }],
+    },
+    { step_index: 2, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-21T10:00:04Z', content: 'ok' },
+    {
+      step_index: 3,
+      source: 'MODEL',
+      type: 'PLANNER_RESPONSE',
+      status: 'DONE',
+      created_at: '2026-11-21T10:00:05Z',
+      model: 'gemini-4-neon-high',
+      input_tokens: 200,
+      cache_read_tokens: 1000,
+      output_tokens: 500,
+      thinking: 'Done editing, replying now.',
+      content: 'Updated /tmp/a.js.',
+    },
+  ].map((x) => JSON.stringify(x)).join('\n');
+
+  // Step 1 would be 600 / 0.2s = 3000 tok/s if counted!
+  const dbTelemetry = {
+    steps: new Map([
+      [1, { isPlanner: true, totalMs: 2200, ttftMs: 2000, streamMs: 200, thinkingMs: 0, outputGenMs: 200, thinkingTokens: 0, endMs: Date.parse('2026-11-21T10:00:03.200Z') }],
+      [2, { isPlanner: false, toolExecMs: 500, endMs: Date.parse('2026-11-21T10:00:04.000Z') }],
+      [3, { isPlanner: true, totalMs: 7000, ttftMs: 2000, streamMs: 5000, thinkingMs: 1000, outputGenMs: 4000, thinkingTokens: 150, endMs: Date.parse('2026-11-21T10:00:12.000Z') }],
+    ]),
+  };
+
+  const parsed = parseTranscript(jsonl, { conversationId: 'pure-toolcall-speed-test', dbTelemetry });
+  // Duration is still preserved for both steps (2200 + 7000 = 9200), but speed only uses step 3 (500 / 5s = 100 tok/s)
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].durationMs, 9200);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].timedDurationMs, 5000);
+  assert.equal(parsed.modelsUsed['gemini-4-neon-high'].timedOutputTokens, 500);
+  assert.equal(parsed.timing.outputTokPerSec, 100);
+  assert.equal(parsed.timing.maxTokPerSec, 100);
+  assert.equal(parsed.modelsBreakdown[0].tokPerSec, 100);
+  assert.equal(parsed.modelComposition[0].tokPerSec, 100);
+  assert.equal(parsed.modelComposition[0].postCompactTokPerSec, 100);
+  assert.equal(parsed.timeline[0].speedExcluded, true);
+  assert.equal(parsed.timeline[0].tokPerSec, 0);
+  assert.equal(parsed.timeline[1].speedExcluded, false);
+  assert.equal(parsed.timeline[1].tokPerSec, 100);
+
+  const tr = parseTrace(jsonl, { dbTelemetry });
+  const models = tr.items.filter((x) => x.kind === 'model');
+  assert.equal(models[0].speedExcluded, true);
+  assert.equal(models[0].tokPerSec, 0);
+  assert.equal(models[0].durationMs, 2200);
+  assert.equal(models[1].speedExcluded, false);
+  assert.equal(models[1].tokPerSec, 100);
+});

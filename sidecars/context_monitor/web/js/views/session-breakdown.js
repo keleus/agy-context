@@ -19,6 +19,13 @@ export function computeSessionSpeedStats(s) {
   const tl = Array.isArray(s?.timeline) ? s.timeline : [];
 
   const speedMsOf = (pt) => {
+    if (!pt) return 0;
+    if (
+      pt.speedExcluded
+      || ((pt.toolCount || 0) > 0 && !String(pt.preview || '').trim() && !(pt.thinkingMs > 0))
+    ) {
+      return 0;
+    }
     const streamMs = Number(pt?.streamMs || 0);
     if (streamMs > 0) return streamMs;
     return Number(pt?.ttftMs || 0) > 0 ? 0 : Number(pt?.durationMs || 0);

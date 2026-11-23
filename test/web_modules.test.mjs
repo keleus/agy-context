@@ -51,6 +51,38 @@ test('index.html loads /styles.css and classic /app.js for sidecar_sdk compatibi
   assert.ok(!html.includes('type="module"'));
 });
 
+test('computeTopbarSpeed averages last 5 valid calls and filters pure tool-call & micro-burst spikes', () => {
+  const src = readFileSync(join(SIDECAR_DIR, 'web', 'js', 'components', 'breakdowns.js'), 'utf-8');
+  const start = src.indexOf('const TOPBAR_SPEED_WINDOW');
+  const end = src.indexOf('export function updateTopbarSpeed');
+  assert.ok(start >= 0 && end > start, 'expected computeTopbarSpeed block in breakdowns.js');
+  const snippet = `${src.slice(start, end).replace(/^export\s+/gm, '')}\ncomputeTopbarSpeed;`;
+  const computeTopbarSpeed = vm.runInNewContext(snippet);
+
+  const session = {
+    model: 'gemini-4-neon-high',
+    timing: { outputTokPerSec: 95 },
+    timeline: [
+      { model: 'gemini-4-neon-high', outputTokens: 100, streamMs: 2000, ttftMs: 1000, durationMs: 3000, preview: 'old slow call' },
+      { model: 'gemini-4-neon-high', outputTokens: 200, streamMs: 2000, ttftMs: 1000, durationMs: 3000, preview: 'call 1' },
+      { model: 'gemini-4-neon-high', outputTokens: 300, streamMs: 3000, ttftMs: 1000, durationMs: 4000, preview: 'call 2' },
+      { model: 'gemini-4-neon-high', outputTokens: 250, streamMs: 2500, ttftMs: 1000, durationMs: 3500, preview: 'call 3' },
+      { model: 'gemini-4-neon-high', outputTokens: 150, streamMs: 1500, ttftMs: 1000, durationMs: 2500, preview: 'call 4' },
+      { model: 'gemini-4-neon-high', outputTokens: 100, streamMs: 1000, ttftMs: 1000, durationMs: 2000, preview: 'call 5' },
+      // Pure tool-call without thinking (3000 tok/s spike) -> must be excluded
+      { model: 'gemini-4-neon-high', outputTokens: 600, streamMs: 200, ttftMs: 2000, durationMs: 2200, toolCount: 1, preview: '', speedExcluded: true },
+      // Micro-burst < 200ms (3000 tok/s spike) -> skipped when qualified samples exist
+      { model: 'gemini-4-neon-high', outputTokens: 30, streamMs: 10, ttftMs: 2000, durationMs: 2010, preview: 'ok' },
+    ],
+  };
+
+  const res = computeTopbarSpeed(session);
+  // Uses calls 1..5 (1000 tokens / 10s = 100 tok/s), ignoring old slow call, pure tool-call spike, and 10ms micro-burst
+  assert.equal(res.speed, 100);
+  assert.equal(res.sampleCount, 5);
+  assert.equal(res.model, 'gemini-4-neon-high');
+});
+
 test('all proportion bars use bindSegBarTips custom tooltips instead of native title on segments', async () => {
   const { bindSegBarTips, tipHeadHtml } = await import('../sidecars/context_monitor/web/js/format.js');
 

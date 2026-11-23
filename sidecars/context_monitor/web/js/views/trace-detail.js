@@ -257,12 +257,25 @@ export function renderTraceDetailPanel(item) {
     } else {
       const expanded = !!state.traceOverviewExpanded;
       const hasTiming = (item.durationMs || 0) > 0;
-      const speedMs = (item.streamMs || 0) > 0
-        ? item.streamMs
-        : ((item.ttftMs || 0) > 0 ? 0 : (item.durationMs || 0));
-      const detailThroughput = speedMs > 0 && (item.outputTokens || 0) > 0
-        ? Math.round((item.outputTokens / (speedMs / 1000)) * 10) / 10
-        : (item.tokPerSec || 0);
+      const isSpeedExcluded = Boolean(
+        item.speedExcluded ?? (
+          (item.toolCount || 0) > 0
+          && !item.hasReply
+          && !item.hasThinking
+          && !(item.thinkingTokens > 0)
+          && !(item.thinkingMs > 0)
+        ),
+      );
+      const speedMs = isSpeedExcluded
+        ? 0
+        : ((item.streamMs || 0) > 0
+          ? item.streamMs
+          : ((item.ttftMs || 0) > 0 ? 0 : (item.durationMs || 0)));
+      const detailThroughput = isSpeedExcluded
+        ? 0
+        : (speedMs > 0 && (item.outputTokens || 0) > 0
+          ? Math.round((item.outputTokens / (speedMs / 1000)) * 10) / 10
+          : (item.tokPerSec || 0));
       const timingRows = [[t('td.start'), fmtIsoLocal(item.at)]];
       if ((item.ttftMs || 0) > 0) timingRows.push([t('td.ttft'), `${(item.ttftMs / 1000).toFixed(2)}s`]);
       if ((item.thinkingMs || 0) > 0) timingRows.push([t('td.thinkingTime'), `${(item.thinkingMs / 1000).toFixed(2)}s`]);

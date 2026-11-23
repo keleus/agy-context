@@ -92,6 +92,7 @@ test('parseTrace handles badges, excludes idle gaps, and integrates hook timings
       input_tokens: 1000,
       cache_read_tokens: 0,
       output_tokens: 400,
+      thinking: 'Checking /tmp/a.txt',
       tool_calls: [{ name: 'read_file', args: { Path: '"/tmp/a.txt"' } }],
     },
     { step_index: 2, source: 'MODEL', type: 'GENERIC', status: 'DONE', created_at: '2026-11-20T14:00:05Z', content: 'ok' },

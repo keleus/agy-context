@@ -844,9 +844,16 @@ export function parseTranscript(text, {
       }
     }
 
-    const callSpeedMs = stepStreamMs > 0
+    const hasReplyText = Boolean(String(pStep.content || '').trim());
+    const hasThinkingSignal = Boolean(String(pStep.thinking || '').trim())
+      || (dbStep?.thinkingTokens || 0) > 0
+      || stepThinkingMs > 0;
+    const isPureToolCallNoThinking = tcs.length > 0 && !hasReplyText && !hasThinkingSignal;
+
+    const rawSpeedMs = stepStreamMs > 0
       ? stepStreamMs
       : (stepTtftMs > 0 ? 0 : callModelMs);
+    const callSpeedMs = isPureToolCallNoThinking ? 0 : rawSpeedMs;
 
     if (callModelMs > 0) {
       modelsUsed[model].durationMs += callModelMs;
@@ -930,6 +937,7 @@ export function parseTranscript(text, {
       streamMs: stepStreamMs,
       thinkingMs: stepThinkingMs,
       tokPerSec: callTokPerSec,
+      speedExcluded: isPureToolCallNoThinking,
       toolCount: tcs.length,
       tools: tcs.map((t) => t?.name || 'tool'),
       preview: (pStep.content || pStep.thinking || '').replace(/\s+/g, ' ').trim().slice(0, 100),

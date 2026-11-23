@@ -237,13 +237,21 @@ export function parseTrace(text, { hookTimings = null, dbTelemetry = null, known
           timingSource = 'hook';
         }
       }
-      const speedMs = streamMs > 0
-        ? streamMs
-        : (ttftMs > 0 ? 0 : modelDurMs);
-      const tokPerSec = speedMs > 0 ? Math.round((outTok / (speedMs / 1000)) * 10) / 10 : 0;
-
       const replyText = String(st.content || '');
       const thinkingText = String(st.thinking || '');
+      const hasReply = Boolean(replyText.trim());
+      const hasThinking = Boolean(thinkingText.trim());
+      const isPureToolCallNoThinking = tcs.length > 0
+        && !hasReply
+        && !hasThinking
+        && !(thinkingTokens > 0)
+        && !(thinkingMs > 0);
+      const rawSpeedMs = streamMs > 0
+        ? streamMs
+        : (ttftMs > 0 ? 0 : modelDurMs);
+      const speedMs = isPureToolCallNoThinking ? 0 : rawSpeedMs;
+      const tokPerSec = speedMs > 0 ? Math.round((outTok / (speedMs / 1000)) * 10) / 10 : 0;
+
       const previewSource = replyText.trim() || thinkingText.trim();
       const preview = previewSource.replace(/\s+/g, ' ').slice(0, 160);
 
@@ -272,9 +280,10 @@ export function parseTrace(text, { hookTimings = null, dbTelemetry = null, known
           outputTokens: outTok,
           promptTokens: promptTok,
           tokPerSec,
+          speedExcluded: isPureToolCallNoThinking,
           toolCount: tcs.length,
-          hasReply: Boolean(replyText.trim()),
-          hasThinking: Boolean(thinkingText.trim()),
+          hasReply,
+          hasThinking,
           preview,
         },
         {

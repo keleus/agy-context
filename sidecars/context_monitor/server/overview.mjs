@@ -115,6 +115,7 @@ export function buildOverview({ range = '30d', date = '', start = '', end = '', 
   let hookToolErrors = 0;
   const hookReasons = {};
 
+  let hasModernTimedStats = false;
   for (const s of filtered) {
     totalTurns += s.turns;
     totalModelCalls += s.modelCalls;
@@ -167,6 +168,7 @@ export function buildOverview({ range = '30d', date = '', start = '', end = '', 
       modelsUsed[m].calls += mv.calls;
       modelsUsed[m].sessions += 1;
       modelsUsed[m].durationMs += mv.durationMs || 0;
+      if (mv.timedDurationMs !== undefined) hasModernTimedStats = true;
       modelsUsed[m].timedOutputTokens += mv.timedOutputTokens ?? mv.outputTokens;
       modelsUsed[m].timedDurationMs += mv.timedDurationMs ?? mv.durationMs ?? 0;
     }
@@ -254,7 +256,7 @@ export function buildOverview({ range = '30d', date = '', start = '', end = '', 
   const totalGenMs = thinkingMs + modelGenMs;
   const outputTokPerSec = totalTimedMs > 0
     ? Math.round((totalTimedOut / (totalTimedMs / 1000)) * 10) / 10
-    : (totalGenMs > 0 ? Math.round((totalOutput / (totalGenMs / 1000)) * 10) / 10 : 0);
+    : (!hasModernTimedStats && totalGenMs > 0 ? Math.round((totalOutput / (totalGenMs / 1000)) * 10) / 10 : 0);
 
   const modelsBreakdown = Object.entries(modelsUsed)
     .map(([m, mv]) => {

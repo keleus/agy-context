@@ -281,6 +281,61 @@ export function renderModelBadges(it) {
   return badges.join('');
 }
 
+const TOPBAR_SPEED_WINDOW = 5;
+const TOPBAR_MIN_SAMPLE_MS = 200;
+const TOPBAR_MIN_SAMPLE_TOKENS = 10;
+
+export function computeTopbarSpeed(s) {
+  const tl = Array.isArray(s?.timeline) ? s.timeline : [];
+  let curModel = '';
+  const qualified = [];
+  const fallback = [];
+
+  for (let i = tl.length - 1; i >= 0; i--) {
+    const pt = tl[i];
+    if (!pt) continue;
+    const isExcluded = Boolean(
+      pt.speedExcluded
+      || ((pt.toolCount || 0) > 0 && !String(pt.preview || '').trim() && !(pt.thinkingMs > 0)),
+    );
+    if (isExcluded) continue;
+    const outTok = Number(pt.outputTokens || 0);
+    const streamMs = Number(pt.streamMs || 0);
+    const ttftMs = Number(pt.ttftMs || 0);
+    const durMs = Number(pt.durationMs || 0);
+    const speedMs = streamMs > 0 ? streamMs : (ttftMs > 0 ? 0 : durMs);
+    if (speedMs <= 0 || outTok <= 0) continue;
+
+    const ptModel = pt.model || '';
+    if (!curModel) curModel = ptModel;
+    if (curModel && ptModel && ptModel !== curModel) continue;
+
+    if (fallback.length < TOPBAR_SPEED_WINDOW) {
+      fallback.push({ outTok, speedMs });
+    }
+    if (speedMs >= TOPBAR_MIN_SAMPLE_MS && outTok >= TOPBAR_MIN_SAMPLE_TOKENS) {
+      qualified.push({ outTok, speedMs });
+      if (qualified.length >= TOPBAR_SPEED_WINDOW) break;
+    }
+  }
+
+  const samples = qualified.length ? qualified : fallback;
+  let speed = 0;
+  if (samples.length) {
+    const totalOut = samples.reduce((a, x) => a + x.outTok, 0);
+    const totalMs = samples.reduce((a, x) => a + x.speedMs, 0);
+    speed = totalMs > 0 ? Math.round((totalOut / (totalMs / 1000)) * 10) / 10 : 0;
+  } else {
+    speed = s?.timing?.outputTokPerSec || 0;
+  }
+
+  return {
+    speed,
+    sampleCount: samples.length,
+    model: curModel || s?.model || '',
+  };
+}
+
 export function updateTopbarSpeed(s) {
   const el = $('topbar-speed');
   if (!el) return;
@@ -288,30 +343,14 @@ export function updateTopbarSpeed(s) {
     el.classList.add('hidden');
     return;
   }
-  const tl = Array.isArray(s.timeline) ? s.timeline : [];
-  let latestCall = null;
-  for (let i = tl.length - 1; i >= 0; i--) {
-    const pt = tl[i];
-    const outTok = Number(pt?.outputTokens || 0);
-    const streamMs = Number(pt?.streamMs || 0);
-    const ttftMs = Number(pt?.ttftMs || 0);
-    const durMs = Number(pt?.durationMs || 0);
-    const speedMs = streamMs > 0 ? streamMs : (ttftMs > 0 ? 0 : durMs);
-    if (pt && speedMs > 0 && outTok > 0) {
-      latestCall = { ...pt, outTok, speedMs };
-      break;
-    }
-  }
-  const spd = latestCall
-    ? (latestCall.tokPerSec || Math.round((latestCall.outTok / (latestCall.speedMs / 1000)) * 10) / 10)
-    : (s.timing?.outputTokPerSec || 0);
-  if (!spd) {
+  const { speed, sampleCount, model } = computeTopbarSpeed(s);
+  if (!speed) {
     el.classList.add('hidden');
     return;
   }
-  const curModel = latestCall?.model || s.model || '';
-  const stepTag = latestCall?.step != null ? ` #${latestCall.step}` : '';
-  el.textContent = `${spd} tok/s`;
-  el.title = curModel ? `${curModel}${stepTag} · ${spd} tok/s` : `${spd} tok/s`;
+  const winTag = sampleCount ? t('topbar.recentSpeed', { n: sampleCount }) : '';
+  const titleParts = [model, winTag, `${speed} tok/s`].filter(Boolean);
+  el.textContent = `${speed} tok/s`;
+  el.title = titleParts.join(' · ');
   el.classList.remove('hidden');
 }
