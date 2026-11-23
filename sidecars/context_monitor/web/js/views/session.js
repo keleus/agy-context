@@ -6,15 +6,16 @@
 import { DEFAULT_SESSION_CTX_LIMIT } from '../constants.js';
 import {
   $,
+  bindSegBarTips,
   esc,
   fmtDur,
   fmtPct,
   fmtTokens,
   fmtTraceDur,
   hideTip,
-  moveTip,
   resolveSessionContextLimit,
   showTip,
+  tipHeadHtml,
 } from '../format.js';
 import { t } from '../i18n.js';
 import { applySessionLayout } from '../layout.js';
@@ -364,35 +365,36 @@ export function renderSession() {
     .filter((r) => r.value > 0)
     .map((r) => {
       const winFrac = (r.value / ctxLimit) * 100;
-      return `<div class="ctx-seg" data-id="${esc(r.id)}" style="width:${Math.max(0.4, winFrac).toFixed(3)}%;background:${r.color}"></div>`;
+      return `<div class="ctx-seg" data-seg-id="${esc(r.id)}" style="width:${Math.max(0.4, winFrac).toFixed(3)}%;background:${r.color}"></div>`;
     })
     .join('');
-  const freeHtml = freeTokens > 0 ? '<div class="ctx-seg free" data-id="free"></div>' : '';
+  const freeHtml = freeTokens > 0 ? '<div class="ctx-seg free" data-seg-id="free"></div>' : '';
   barEl.innerHTML = segHtml + freeHtml;
 
-  barEl.querySelectorAll('.ctx-seg').forEach((seg) => {
-    const id = seg.dataset.id;
-    const row = rows.find((r) => r.id === id);
-    seg.addEventListener('mouseenter', (e) => {
-      if (id === 'free') {
-        showTip(e, `<strong>${esc(t('cat.free_space'))}</strong><br>${fmtTokens(freeTokens)} (${fmtPct(freeTokens / ctxLimit, 1)})`);
-      } else if (row) {
-        showTip(e, `
-          <div><strong>${esc(row.label)}</strong> · ${fmtTokens(row.value)}</div>
-          <div>${esc(t('tip.windowShare', { pct: fmtPct(row.value / ctxLimit, 2) }))}</div>
-          <div style="opacity:.75">${esc(t('tip.usedShare', { pct: fmtPct(row.value / Math.max(1, used), 1) }))}</div>
-        `);
-      }
-    });
-    seg.addEventListener('mousemove', moveTip);
-    seg.addEventListener('mouseleave', hideTip);
-    if (row) {
-      seg.addEventListener('click', () => {
-        if (state.expandedKeys.has(row.id)) state.expandedKeys.delete(row.id);
-        else state.expandedKeys.add(row.id);
-        renderBreakdownList(rows, freeTokens, ctxLimit);
-      });
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  bindSegBarTips(barEl, (id) => {
+    if (id === 'free') {
+      return `
+        ${tipHeadHtml('', t('cat.free_space'), { free: true })}
+        <div><strong>${fmtTokens(freeTokens)}</strong> · ${fmtPct(freeTokens / ctxLimit, 1)}</div>
+      `;
     }
+    const row = rowById.get(id);
+    if (!row) return null;
+    return `
+      ${tipHeadHtml(row.color, row.label, { mono: row.kind === 'model', suffix: ` · ${fmtTokens(row.value)}` })}
+      <div>${esc(t('tip.windowShare', { pct: fmtPct(row.value / ctxLimit, 2) }))}</div>
+      <div class="tip-sub">${esc(t('tip.usedShare', { pct: fmtPct(row.value / Math.max(1, used), 1) }))}</div>
+    `;
+  }, {
+    legendEl: $('s-breakdown-list'),
+    onClick: (id) => {
+      const row = rowById.get(id);
+      if (!row) return;
+      if (state.expandedKeys.has(row.id)) state.expandedKeys.delete(row.id);
+      else state.expandedKeys.add(row.id);
+      renderBreakdownList(rows, freeTokens, ctxLimit);
+    },
   });
 
   renderBreakdownList(rows, freeTokens, ctxLimit);

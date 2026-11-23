@@ -11,7 +11,7 @@ import {
   DEFAULT_SESSION_ORDER,
   SETTINGS_KEY,
 } from './constants.js';
-import { $, apiGet, initThemeSync, resolveSessionContextLimit } from './format.js';
+import { $, apiGet, hideTip, initThemeSync, resolveSessionContextLimit } from './format.js';
 import { applyStaticI18n } from './i18n.js';
 import { applyContextLayout } from './layout.js';
 import {
@@ -65,6 +65,7 @@ import { checkUpdateOnOpen, renderUpdatePill, startPluginUpdate } from './views/
 initThemeSync();
 
 function selectTab(tab) {
+  hideTip();
   const prev = state.tab;
   const next = normalizeTabParam(tab) || (IS_TRACE_PANE ? 'trace' : 'session');
   if (next === 'settings' && prev !== 'settings') {

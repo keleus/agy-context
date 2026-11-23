@@ -7,6 +7,7 @@ import { ALL_OVERVIEW_CATS, BAR_PALETTE } from '../constants.js';
 import {
   $,
   apiGet,
+  bindSegBarTips,
   esc,
   fmtDur,
   fmtPct,
@@ -15,6 +16,7 @@ import {
   moveTip,
   resolveSessionContextLimit,
   showTip,
+  tipHeadHtml,
 } from '../format.js';
 import { fmtRelative, t } from '../i18n.js';
 import { actions, hostConvId, settings, state } from '../state.js';
@@ -397,11 +399,13 @@ export function renderSessionsList(sessions, workspaces) {
 
   if (!list.length) {
     grid.innerHTML = `<div class="empty-inline">${esc(t('ov.noSessions'))}</div>`;
+    bindSegBarTips(grid, null);
     return;
   }
 
   const currentHost = hostConvId();
   const canJump = !!window.sidecar?.ui?.toggleConversation;
+  const cardSegMap = new Map();
 
   grid.innerHTML = list.map((s) => {
     const limit = resolveSessionContextLimit(s).limit;
@@ -411,13 +415,16 @@ export function renderSessionsList(sessions, workspaces) {
 
     const comp = s.composition || {};
     const segs = ALL_OVERVIEW_CATS
-      .map((c) => ({ label: t(`cat.${c.key}`), color: c.color, value: comp[c.key] || 0 }))
+      .map((c) => ({ key: c.key, label: t(`cat.${c.key}`), color: c.color, value: comp[c.key] || 0 }))
       .filter((x) => x.value > 0)
       .sort((a, b) => b.value - a.value);
     const segSum = segs.reduce((a, x) => a + x.value, 0) || 1;
     const barSegs = segs.map((x) => {
-      const pct = (x.value / segSum) * 100;
-      return `<div class="ctx-seg" style="width:${pct.toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtTokens(x.value)} (${pct.toFixed(1)}%)"></div>`;
+      const share = x.value / segSum;
+      const pct = share * 100;
+      const segId = `${s.conversationId}::${x.key}`;
+      cardSegMap.set(segId, { label: x.label, color: x.color, value: x.value, share });
+      return `<div class="ctx-seg" data-seg-id="${esc(segId)}" style="width:${pct.toFixed(2)}%;background:${x.color}"></div>`;
     }).join('');
 
     const rawLast = String(s.lastUserMessage || '').trim();
@@ -451,8 +458,18 @@ export function renderSessionsList(sessions, workspaces) {
     `;
   }).join('');
 
+  bindSegBarTips(grid, (id) => {
+    const seg = cardSegMap.get(id);
+    if (!seg) return null;
+    return `
+      ${tipHeadHtml(seg.color, seg.label)}
+      <div><strong>${fmtTokens(seg.value)}</strong> · ${fmtPct(seg.share, 1)}</div>
+    `;
+  });
+
   grid.querySelectorAll('.session-card').forEach((card) => {
     card.addEventListener('click', (e) => {
+      hideTip();
       const jumpBtn = e.target.closest('[data-jump]');
       if (jumpBtn) {
         e.stopPropagation();

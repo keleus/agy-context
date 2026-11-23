@@ -177,7 +177,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
 
     if (!expandable) {
       return `
-        <div class="bd-row">
+        <div class="bd-row" data-seg-id="${esc(r.id)}">
           <div class="bd-left">
             <span class="bd-chevron placeholder"></span>
             <span class="bd-dot" style="background:${r.color}"></span>
@@ -371,7 +371,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
 
     return `
       <div class="bd-group${isOpen ? ' open' : ''}" data-group-id="${esc(r.id)}">
-        <button type="button" class="bd-row clickable" aria-expanded="${isOpen}">
+        <button type="button" class="bd-row clickable" data-seg-id="${esc(r.id)}" aria-expanded="${isOpen}">
           <div class="bd-left">
             ${CHEVRON_SVG}
             <span class="bd-dot" style="background:${r.color}"></span>
@@ -390,7 +390,7 @@ export function renderBreakdownList(rows, freeTokens, ctxLimit) {
   }).join('');
 
   const freeRowHtml = `
-    <div class="bd-row free-row">
+    <div class="bd-row free-row" data-seg-id="free">
       <div class="bd-left">
         <span class="bd-chevron placeholder"></span>
         <span class="bd-dot free"></span>

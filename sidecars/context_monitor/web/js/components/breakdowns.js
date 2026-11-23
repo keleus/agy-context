@@ -8,7 +8,7 @@
  */
 
 import { ALL_OVERVIEW_CATS, MODEL_COLORS, TIMING_META } from '../constants.js';
-import { $, esc, fmtDur, fmtPct, fmtTokens } from '../format.js';
+import { $, bindSegBarTips, esc, fmtDur, fmtPct, fmtTokens, tipHeadHtml } from '../format.js';
 import { hasI18nKey, t } from '../i18n.js';
 import { state } from '../state.js';
 
@@ -22,17 +22,35 @@ export function renderToolExecCard(cardEl, metaEl, barEl, statsEl, reasonsEl, { 
   const durMs = sumDurMs > 0 ? sumDurMs : (totalExecMs || 0);
 
   cardEl.classList.toggle('hidden', totalCalls === 0);
-  if (totalCalls === 0) return;
+  if (totalCalls === 0) {
+    if (barEl) {
+      barEl.innerHTML = '';
+      bindSegBarTips(barEl, null);
+    }
+    return;
+  }
 
   metaEl.textContent = t('hooks.callsCount', { n: totalCalls });
 
   const okPct = totalCalls > 0 ? succeededCalls / totalCalls : 1;
   const errPct = totalCalls > 0 ? failedCalls / totalCalls : 0;
+  const execSegs = [
+    { id: 'success', label: t('hooks.success'), color: 'var(--green)', count: succeededCalls, pct: okPct },
+    { id: 'failed', label: t('hooks.failed'), color: 'var(--rose)', count: failedCalls, pct: errPct },
+  ].filter((s) => s.count > 0);
   if (barEl) {
-    barEl.innerHTML = [
-      succeededCalls > 0 ? `<div class="ctx-seg" style="width:${(okPct * 100).toFixed(2)}%;background:var(--green)" title="${esc(t('hooks.success'))}: ${succeededCalls}"></div>` : '',
-      failedCalls > 0 ? `<div class="ctx-seg" style="width:${(errPct * 100).toFixed(2)}%;background:var(--rose)" title="${esc(t('hooks.failed'))}: ${failedCalls}"></div>` : '',
-    ].join('');
+    barEl.innerHTML = execSegs
+      .map((s) => `<div class="ctx-seg" data-seg-id="${s.id}" style="width:${(s.pct * 100).toFixed(2)}%;background:${s.color}"></div>`)
+      .join('');
+    const segById = new Map(execSegs.map((s) => [s.id, s]));
+    bindSegBarTips(barEl, (id) => {
+      const s = segById.get(id);
+      if (!s) return null;
+      return `
+        ${tipHeadHtml(s.color, s.label)}
+        <div><strong>${s.count}</strong> / ${totalCalls} · ${fmtPct(s.pct, 1)}</div>
+      `;
+    }, { legendEl: statsEl });
   }
 
   const avgMs = totalCalls > 0 && durMs > 0 ? Math.round(durMs / totalCalls) : 0;
@@ -41,12 +59,12 @@ export function renderToolExecCard(cardEl, metaEl, barEl, statsEl, reasonsEl, { 
     : '—';
 
   statsEl.innerHTML = `
-    <div class="hooks-stat-cell">
+    <div class="hooks-stat-cell" data-seg-id="success">
       <div class="hooks-stat-label">${esc(t('hooks.success'))}</div>
       <div class="hooks-stat-val ok">${succeededCalls}</div>
       <div class="hooks-stat-sub">${fmtPct(okPct, 1)}</div>
     </div>
-    <div class="hooks-stat-cell">
+    <div class="hooks-stat-cell" data-seg-id="failed">
       <div class="hooks-stat-label">${esc(t('hooks.failed'))}</div>
       <div class="hooks-stat-val${failedCalls > 0 ? ' err' : ''}">${failedCalls}</div>
       <div class="hooks-stat-sub">${fmtPct(errPct, 1)}</div>
@@ -77,12 +95,21 @@ export function renderTokenBreakdown(barEl, legendEl, metaEl, cum, totalTokens =
   const segSum = tokSegs.reduce((a, x) => a + x.value, 0);
   const tokTotal = segSum || 1;
   if (metaEl) metaEl.textContent = fmtTokens(totalTokens || segSum || 0);
-  barEl.innerHTML = tokSegs
-    .filter((x) => x.value > 0)
-    .map((x) => `<div class="ctx-seg" style="width:${((x.value / tokTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtTokens(x.value)}"></div>`)
+  const visibleTokSegs = tokSegs.filter((x) => x.value > 0);
+  barEl.innerHTML = visibleTokSegs
+    .map((x) => `<div class="ctx-seg" data-seg-id="${esc(x.key)}" style="width:${((x.value / tokTotal) * 100).toFixed(2)}%;background:${x.color}"></div>`)
     .join('');
+  const tokByKey = new Map(visibleTokSegs.map((x) => [x.key, x]));
+  bindSegBarTips(barEl, (id) => {
+    const x = tokByKey.get(id);
+    if (!x) return null;
+    return `
+      ${tipHeadHtml(x.color, x.label)}
+      <div><strong>${fmtTokens(x.value)}</strong> · ${fmtPct(x.value / tokTotal, 1)}</div>
+    `;
+  }, { legendEl });
   legendEl.innerHTML = tokSegs.map((x) => `
-    <div class="comp-item" title="${esc(x.label)}: ${fmtTokens(x.value)} (${fmtPct(x.value / tokTotal, 1)})">
+    <div class="comp-item" data-seg-id="${esc(x.key)}" title="${esc(x.label)}: ${fmtTokens(x.value)} (${fmtPct(x.value / tokTotal, 1)})">
       <div class="comp-left">
         <span class="comp-dot" style="background:${x.color}"></span>
         <span class="comp-name">${esc(x.label)}</span>
@@ -103,12 +130,22 @@ export function renderTimingBreakdown(barEl, legendEl, speedEl, tm) {
     .map((x) => ({ ...x, label: t(`time.${x.key}`), value: timing[x.key] || 0 }))
     .filter((x) => !x.optional || x.value > 0);
   const tmTotal = tmSegs.reduce((a, x) => a + x.value, 0) || 1;
-  barEl.innerHTML = tmSegs
-    .filter((x) => x.value > 0)
-    .map((x) => `<div class="ctx-seg" style="width:${((x.value / tmTotal) * 100).toFixed(2)}%;background:${x.color}" title="${esc(x.label)}: ${fmtDur(x.value)}"></div>`)
+  const visibleTmSegs = tmSegs.filter((x) => x.value > 0);
+  barEl.innerHTML = visibleTmSegs
+    .map((x) => `<div class="ctx-seg" data-seg-id="${esc(x.key)}" style="width:${((x.value / tmTotal) * 100).toFixed(2)}%;background:${x.color}"></div>`)
     .join('');
+  const tmByKey = new Map(visibleTmSegs.map((x) => [x.key, x]));
+  bindSegBarTips(barEl, (id) => {
+    const x = tmByKey.get(id);
+    if (!x) return null;
+    const durText = x.value > 0 && x.value < 1000 ? `${Math.round(x.value)}ms` : fmtDur(x.value);
+    return `
+      ${tipHeadHtml(x.color, x.label)}
+      <div><strong>${durText}</strong> · ${fmtPct(x.value / tmTotal, 1)}</div>
+    `;
+  }, { legendEl });
   legendEl.innerHTML = tmSegs.map((x) => `
-    <div class="comp-item" title="${esc(x.label)}: ${fmtDur(x.value)} (${fmtPct(x.value / tmTotal, 1)})">
+    <div class="comp-item" data-seg-id="${esc(x.key)}" title="${esc(x.label)}: ${fmtDur(x.value)} (${fmtPct(x.value / tmTotal, 1)})">
       <div class="comp-left">
         <span class="comp-dot" style="background:${x.color}"></span>
         <span class="comp-name">${esc(x.label)}</span>
@@ -126,28 +163,47 @@ export function renderModelsCard(listEl, barEl, metaEl, modelsList, { showSessio
   metaEl.textContent = items.length ? t('models.count', { n: items.length }) : '';
   if (!items.length) {
     barEl.classList.add('hidden');
+    barEl.innerHTML = '';
+    bindSegBarTips(barEl, null);
     listEl.innerHTML = `<div class="empty-inline">${esc(t('models.noModels'))}</div>`;
     return;
   }
 
   const totalAll = items.reduce((a, m) => a + (m.totalTokens || 0), 0) || 1;
+  const callTextOf = (m) => (showSessions && m.sessions
+    ? t('models.sessionsCalls', { s: m.sessions, c: m.calls })
+    : t('models.callsOnly', { c: m.calls }));
+
   barEl.classList.toggle('hidden', items.length <= 1);
   if (items.length > 1) {
     barEl.innerHTML = items.map((m, idx) => {
       const w = Math.max(1, ((m.totalTokens || 0) / totalAll) * 100);
       const color = MODEL_COLORS[idx % MODEL_COLORS.length];
-      return `<div class="ctx-seg" style="width:${w.toFixed(2)}%;background:${color}" title="${esc(m.model)}: ${fmtTokens(m.totalTokens)}"></div>`;
+      return `<div class="ctx-seg" data-seg-id="${idx}" style="width:${w.toFixed(2)}%;background:${color}"></div>`;
     }).join('');
+    bindSegBarTips(barEl, (id) => {
+      const idx = Number(id);
+      const m = items[idx];
+      if (!m) return null;
+      const color = MODEL_COLORS[idx % MODEL_COLORS.length];
+      const share = (m.totalTokens || 0) / totalAll;
+      return `
+        ${tipHeadHtml(color, m.model, { mono: true })}
+        <div><strong>${fmtTokens(m.totalTokens)}</strong> · ${fmtPct(share, 1)} · ${esc(callTextOf(m))}</div>
+        <div class="tip-sub">${esc(t('tip.newIn'))} ${fmtTokens(m.inputTokens)} · ${esc(t('tip.cacheRead'))} ${fmtTokens(m.cacheReadTokens)} · ${esc(t('tip.out'))} ${fmtTokens(m.outputTokens)}</div>
+      `;
+    }, { legendEl: listEl });
+  } else {
+    barEl.innerHTML = '';
+    bindSegBarTips(barEl, null);
   }
 
   listEl.innerHTML = items.map((m, idx) => {
     const color = MODEL_COLORS[idx % MODEL_COLORS.length];
-    const callText = showSessions && m.sessions
-      ? t('models.sessionsCalls', { s: m.sessions, c: m.calls })
-      : t('models.callsOnly', { c: m.calls });
+    const callText = callTextOf(m);
     const tipText = `In ${fmtTokens(m.inputTokens)} · Cache ${fmtTokens(m.cacheReadTokens)} · Out ${fmtTokens(m.outputTokens)}`;
     return `
-      <div class="model-stat-row" title="${esc(tipText)}">
+      <div class="model-stat-row" data-seg-id="${idx}" title="${esc(tipText)}">
         <div class="ms-left">
           <span class="bd-dot" style="background:${color}"></span>
           <span class="ms-name">${esc(m.model)}</span>

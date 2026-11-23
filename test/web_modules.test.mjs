@@ -50,3 +50,70 @@ test('index.html loads /styles.css and classic /app.js for sidecar_sdk compatibi
   assert.ok(html.includes('<script src="/app.js"></script>'));
   assert.ok(!html.includes('type="module"'));
 });
+
+test('all proportion bars use bindSegBarTips custom tooltips instead of native title on segments', async () => {
+  const { bindSegBarTips, tipHeadHtml } = await import('../sidecars/context_monitor/web/js/format.js');
+
+  for (const rel of ['web/js/components/breakdowns.js', 'web/js/views/session.js', 'web/js/views/overview.js']) {
+    const src = readFileSync(join(SIDECAR_DIR, rel), 'utf-8');
+    assert.ok(src.includes('bindSegBarTips('), `${rel} should bind custom hover tooltips`);
+    assert.ok(!/<div class="ctx-seg"[^>]*\btitle=/.test(src), `${rel} should not rely on native title on .ctx-seg`);
+  }
+
+  // Minimal DOM harness for bindSegBarTips hover, legend sync, and re-render cleanup
+  const listeners = new Map();
+  const makeClassList = (initial = []) => {
+    const set = new Set(initial);
+    return {
+      add: (c) => set.add(c),
+      remove: (c) => set.delete(c),
+      toggle: (c, force) => (force === undefined ? (set.has(c) ? set.delete(c) : set.add(c)) : (force ? set.add(c) : set.delete(c))),
+      contains: (c) => set.has(c),
+    };
+  };
+  const tooltipEl = {
+    innerHTML: '',
+    classList: makeClassList(['hidden']),
+    style: {},
+    getBoundingClientRect: () => ({ width: 120, height: 40 }),
+  };
+  const prevDoc = globalThis.document;
+  const prevWin = globalThis.window;
+  globalThis.document = { getElementById: (id) => (id === 'tooltip' ? tooltipEl : null) };
+  globalThis.window = { innerWidth: 800, innerHeight: 600 };
+
+  try {
+    const segA = { dataset: { segId: 'a' }, closest: (sel) => (sel === '.ctx-seg' ? segA : null) };
+    const segB = { dataset: { segId: 'b' }, closest: (sel) => (sel === '.ctx-seg' ? segB : null) };
+    const legA = { dataset: { segId: 'a' }, classList: makeClassList() };
+    const legB = { dataset: { segId: 'b' }, classList: makeClassList() };
+    const legendEl = {
+      querySelectorAll: (sel) => {
+        if (sel === '[data-seg-id]') return [legA, legB];
+        if (sel === '.seg-hover-match') return [legA, legB].filter((n) => n.classList.contains('seg-hover-match'));
+        return [];
+      },
+    };
+    const barEl = {
+      contains: (el) => el === segA || el === segB,
+      addEventListener: (ev, fn) => listeners.set(ev, fn),
+    };
+
+    bindSegBarTips(barEl, (id) => (id === 'a' ? `${tipHeadHtml('var(--blue)', 'Alpha')}<div>10k · 60%</div>` : null), { legendEl });
+    listeners.get('mouseover')({ target: segA, clientX: 100, clientY: 100 });
+    assert.equal(tooltipEl.classList.contains('hidden'), false);
+    assert.ok(tooltipEl.innerHTML.includes('Alpha'));
+    assert.ok(tooltipEl.innerHTML.includes('var(--blue)'));
+    assert.equal(legA.classList.contains('seg-hover-match'), true);
+    assert.equal(legB.classList.contains('seg-hover-match'), false);
+
+    // Re-render while hovered, then leave bar: tooltip must still hide cleanly
+    bindSegBarTips(barEl, (id) => (id === 'b' ? `${tipHeadHtml('var(--rose)', 'Beta')}<div>20k · 40%</div>` : null), { legendEl });
+    listeners.get('mouseleave')({});
+    assert.equal(tooltipEl.classList.contains('hidden'), true);
+    assert.equal(legA.classList.contains('seg-hover-match'), false);
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.window = prevWin;
+  }
+});

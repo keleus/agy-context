@@ -142,6 +142,9 @@ export function fmtSpeed(bps) {
 
 // ---------- Tooltip ----------
 let tipEl = null;
+let tipLastHtml = '';
+const barTipState = new WeakMap();
+
 function getTipEl() {
   if (!tipEl) tipEl = $('tooltip');
   return tipEl;
@@ -150,7 +153,10 @@ function getTipEl() {
 export function showTip(evt, html) {
   const el = getTipEl();
   if (!el) return;
-  el.innerHTML = html;
+  if (html !== tipLastHtml) {
+    el.innerHTML = html;
+    tipLastHtml = html;
+  }
   el.classList.remove('hidden');
   moveTip(evt);
 }
@@ -169,7 +175,86 @@ export function moveTip(evt) {
 }
 
 export function hideTip() {
+  tipLastHtml = '';
   getTipEl()?.classList.add('hidden');
+}
+
+export function tipHeadHtml(color, label, { free = false, mono = false, suffix = '' } = {}) {
+  const dot = free
+    ? '<span class="tip-dot free"></span>'
+    : `<span class="tip-dot" style="background:${color}"></span>`;
+  const cls = mono ? ' class="tip-mono"' : '';
+  return `<div class="tip-head">${dot}<strong${cls}>${esc(label)}</strong>${suffix}</div>`;
+}
+
+export function bindSegBarTips(barEl, getTipHtml, { legendEl = null, onClick = null } = {}) {
+  if (!barEl) return;
+  const prev = barTipState.get(barEl);
+  const st = prev || { hoveredId: null, tipActive: false, legendEl: null, getTipHtml: null, onClick: null };
+  if (st.hoveredId != null && st.legendEl) {
+    st.legendEl.querySelectorAll('.seg-hover-match').forEach((n) => n.classList.remove('seg-hover-match'));
+  }
+  st.hoveredId = null;
+  st.getTipHtml = getTipHtml;
+  st.legendEl = legendEl;
+  st.onClick = onClick;
+  barTipState.set(barEl, st);
+
+  if (prev) return;
+
+  const syncLegend = (nextId) => {
+    const cur = barTipState.get(barEl);
+    if (!cur || cur.hoveredId === nextId) return;
+    cur.hoveredId = nextId;
+    if (cur.legendEl) {
+      cur.legendEl.querySelectorAll('[data-seg-id]').forEach((n) => {
+        n.classList.toggle('seg-hover-match', nextId != null && n.dataset.segId === String(nextId));
+      });
+    }
+  };
+
+  const clearHover = () => {
+    const cur = barTipState.get(barEl);
+    if (!cur) return;
+    syncLegend(null);
+    if (cur.tipActive) {
+      cur.tipActive = false;
+      hideTip();
+    }
+  };
+
+  const updateFromEvent = (e) => {
+    const cur = barTipState.get(barEl);
+    if (!cur?.getTipHtml) {
+      clearHover();
+      return;
+    }
+    const seg = e.target?.closest?.('.ctx-seg');
+    if (!seg || !barEl.contains(seg)) {
+      clearHover();
+      return;
+    }
+    const id = seg.dataset.segId;
+    const html = id != null ? cur.getTipHtml(id, seg) : null;
+    if (!html) {
+      clearHover();
+      return;
+    }
+    syncLegend(id);
+    cur.tipActive = true;
+    showTip(e, html);
+  };
+
+  barEl.addEventListener('mouseover', updateFromEvent);
+  barEl.addEventListener('mousemove', updateFromEvent);
+  barEl.addEventListener('mouseleave', clearHover);
+  barEl.addEventListener('click', (e) => {
+    const cur = barTipState.get(barEl);
+    if (!cur?.onClick) return;
+    const seg = e.target?.closest?.('.ctx-seg');
+    if (!seg || !barEl.contains(seg)) return;
+    cur.onClick(seg.dataset.segId, seg, e);
+  });
 }
 
 // ---------- Theme Sync with Antigravity Host ----------
